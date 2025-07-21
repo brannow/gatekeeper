@@ -58,7 +58,7 @@ final class ConfigManager: ConfigManagerProtocol {
             return nil
         }
         
-        let port: Int = userDefaults.object(forKey: Keys.mqttPort) as? Int ?? 1883
+        let port: UInt16 = userDefaults.object(forKey: Keys.mqttPort) as? UInt16 ?? 8883
         
         return MQTTConfig(host: host, port: port, username: username, password: password)
     }

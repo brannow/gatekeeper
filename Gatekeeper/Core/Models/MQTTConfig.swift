@@ -9,7 +9,7 @@ import Foundation
 
 struct MQTTConfig {
     let host: String
-    let port: Int
+    let port: UInt16
     let username: String
     let password: String
 }

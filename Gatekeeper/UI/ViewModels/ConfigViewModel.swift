@@ -58,7 +58,7 @@ final class ConfigViewModel: ObservableObject {
         }
         
         if !mqttHost.isEmpty && !mqttUsername.isEmpty && !mqttPassword.isEmpty,
-           let port = Int(mqttPort) {
+           let port = UInt16(mqttPort) {
             let config = MQTTConfig(
                 host: mqttHost,
                 port: port,

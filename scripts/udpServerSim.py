@@ -17,7 +17,7 @@ with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
         data, addr = sock.recvfrom(1024)
         print(f"[{time.strftime('%H:%M:%S')}] 📥 Trigger from {addr}: {data.hex()}")
 
-        
+        time.sleep(10)        
 
         # 1) activated
         sock.sendto(b"\x01", addr)

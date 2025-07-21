@@ -9,9 +9,14 @@ import SwiftUI
 
 @main
 struct GatekeeperApp: App {
+    private let dependencyContainer = DependencyContainer()
+    
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            AppButton(
+                viewModel: dependencyContainer.gateViewModel,
+                configViewModel: dependencyContainer.configViewModel
+            )
         }
     }
 }

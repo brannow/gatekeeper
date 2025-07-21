@@ -8,10 +8,10 @@
 import Foundation
 
 protocol NetworkAdapterDelegate: AnyObject {
-    func adapterDidConnect()
-    func adapterDidFail(_ error: GateKeeperError)
-    func adapterDidReceive(_ state: RelayState)
-    func adapterDidComplete()
+    func adapterDidConnect(_ adapter: GateNetworkInterface)
+    func adapterDidFail(_ adapter: GateNetworkInterface, _ error: GateKeeperError)
+    func adapterDidReceive(_ adapter: GateNetworkInterface, _ state: RelayState)
+    func adapterDidComplete(_ adapter: GateNetworkInterface)
 }
 
 protocol GateNetworkInterface: AnyObject {

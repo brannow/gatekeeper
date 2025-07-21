@@ -17,14 +17,12 @@ with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
         data, addr = sock.recvfrom(1024)
         print(f"[{time.strftime('%H:%M:%S')}] 📥 Trigger from {addr}: {data.hex()}")
 
-        time.sleep(10)        
-
         # 1) activated
         sock.sendto(b"\x01", addr)
         print(f"[{time.strftime('%H:%M:%S')}] 📤 Sent 0x01 (activated) → {addr}")
 
         # 2) released after 1 s
-        #time.sleep(1)
+        time.sleep(0.5)
         sock.sendto(b"\x00", addr)
         print(f"[{time.strftime('%H:%M:%S')}] 📤 Sent 0x00 (released)  → {addr}")
         print("-" * 45)

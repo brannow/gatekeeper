@@ -23,39 +23,55 @@ final class SocketAdapter: GateNetworkInterface {
     }
 
     func start() {
+        logger.info("try connect to udp socket", metadata: ["host": host, "port": String(port)])
         conn = NWConnection(host: .init(host), port: .init(integerLiteral: port), using: .udp)
         conn?.stateUpdateHandler = { [weak self] state in
+            guard let self else { return }
             switch state {
-            case .ready: self?.handleReady()
-            case .failed: self?.delegate?.adapterDidFail(.udpConnectionFailed)
-            default: break
+            case .ready:
+                self.delegate?.adapterDidConnect(self)
+            case .failed:
+                self.delegate?.adapterDidFail(self, .udpConnectionFailed)
+            default:
+                break
             }
         }
         conn?.start(queue: .main)
     }
 
-    func stop() { conn?.cancel(); conn = nil }
-
-    private func handleReady() {
-        delegate?.adapterDidConnect()
-        sendTrigger()
+    func stop() {
+        conn?.cancel()
+        conn = nil
     }
 
     private func sendTrigger() {
         conn?.send(content: Data([0x01]), completion: .contentProcessed { [weak self] error in
-            if error != nil { self?.delegate?.adapterDidFail(.udpConnectionFailed); return }
-            self?.receive()
+            guard let self else { return }
+            if error != nil {
+                self.delegate?.adapterDidFail(self, .udpConnectionFailed)
+                return
+            }
+            self.receive()
         })
     }
 
     private func receive() {
         conn?.receive(minimumIncompleteLength: 1, maximumLength: 1) { [weak self] data, _, _, error in
-            if error != nil { self?.delegate?.adapterDidFail(.invalidResponse); return }
+            guard let self else { return }
+            if error != nil {
+                self.delegate?.adapterDidFail(self, .invalidResponse)
+                return
+            }
             guard let byte = data?.first else { return }
             switch byte {
-            case 0x01: self?.delegate?.adapterDidReceive(.activated); self?.receive()
-            case 0x00: self?.delegate?.adapterDidReceive(.released); self?.delegate?.adapterDidComplete()
-            default:   self?.delegate?.adapterDidFail(.invalidResponse)
+            case 0x01:
+                self.delegate?.adapterDidReceive(self, .activated)
+                self.receive()
+            case 0x00:
+                self.delegate?.adapterDidReceive(self, .released)
+                self.delegate?.adapterDidComplete(self)
+            default:
+                self.delegate?.adapterDidFail(self, .invalidResponse)
             }
         }
     }

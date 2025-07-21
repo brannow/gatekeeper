@@ -16,7 +16,10 @@ final class DependencyContainer {
 
     @MainActor
     lazy var gateViewModel: GateViewModel = {
-        GateViewModel(service: networkService)      // matches new init
+        GateViewModel(
+            service: networkService,
+            config: configManager
+        )      // matches new init
     }()
 
     // If you still use ConfigViewModel, adjust its init as well

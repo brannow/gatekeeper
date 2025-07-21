@@ -7,4 +7,4 @@
 
 import Foundation
 
-enum GateState { case ready, triggering, waitingForRelayClose, error }
+enum GateState { case ready, triggering, waitingForRelayClose, timeout, error }

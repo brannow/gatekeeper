@@ -55,8 +55,8 @@ final class MQTTNetworkAdapter: NSObject, GateNetworkInterface {
 extension MQTTNetworkAdapter: CocoaMQTTDelegate {
 
     func mqtt(_ mqtt: CocoaMQTT, didConnectAck ack: CocoaMQTTConnAck) {
-        guard ack == .accept else { delegate?.adapterDidFail(.mqttConnectionFailed); return }
-        delegate?.adapterDidConnect()
+        guard ack == .accept else { delegate?.adapterDidFail(self, .mqttConnectionFailed); return }
+        delegate?.adapterDidConnect(self)
         mqtt.subscribe("iot/house/gate/esp32/status", qos: .qos0)
     }
 
@@ -68,14 +68,14 @@ extension MQTTNetworkAdapter: CocoaMQTTDelegate {
         guard message.topic == "iot/house/gate/esp32/status",
               let str = message.string else { return }
         switch str {
-        case "1": delegate?.adapterDidReceive(.activated)
-        case "0": delegate?.adapterDidReceive(.released); delegate?.adapterDidComplete()
+        case "1": delegate?.adapterDidReceive(self, .activated)
+        case "0": delegate?.adapterDidReceive(self, .released); delegate?.adapterDidComplete(self)
         default: break
         }
     }
 
     func mqttDidDisconnect(_ mqtt: CocoaMQTT, withError err: Error?) {
-        delegate?.adapterDidFail(.connectionFailed)
+        delegate?.adapterDidFail(self, .connectionFailed)
     }
 
     // Unused protocol stubs

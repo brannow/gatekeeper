@@ -1,187 +1,112 @@
-//
-//  AppButton.swift
-//  Gatekeeper
-//
-//  Created by Benjamin Rannow on 21.07.25.
-//
-
+// AppButton.swift
 import SwiftUI
 
 struct AppButton: View {
-    @StateObject private var viewModel: GateViewModel
-    private let configViewModel: ConfigViewModel
-    @State private var showingConfiguration: Bool = false
-    @State private var pulseScale: CGFloat = 1.0
-    @State private var shockwave1Scale: CGFloat = 0.0
-    @State private var shockwave2Scale: CGFloat = 0.0
-    @State private var shockwave3Scale: CGFloat = 0.0
-    @State private var shockwave1Opacity: Double = 0.0
-    @State private var shockwave2Opacity: Double = 0.0
-    @State private var shockwave3Opacity: Double = 0.0
-    
+    @ObservedObject var vm: GateViewModel
+    private let cfgVM: ConfigViewModel
+
+    @State private var showConfig   = false
+    @State private var pulseScale   = 1.0
+    @State private var shockScale   = 1.0
+    @State private var shockOpacity = 0.6
+
     init(viewModel: GateViewModel, configViewModel: ConfigViewModel) {
-        self._viewModel = StateObject(wrappedValue: viewModel)
-        self.configViewModel = configViewModel
+        vm   = viewModel          // plain assignment
+        cfgVM = configViewModel
     }
-    
+
     var body: some View {
-        NavigationView {
-            VStack(spacing: 40) {
-                Spacer()
-                
-                gateButton
-                
-                statusText
-                
-                Spacer()
-                
-                configurationButton
-            }
-            .padding(.horizontal, 32)
-            .navigationTitle("GateKeeper")
-            .navigationBarTitleDisplayMode(.large)
-            .sheet(isPresented: $showingConfiguration) {
-                ConfigView(viewModel: configViewModel)
-                    .onDisappear {
-                        viewModel.refreshConfiguration()
-                    }
-            }
+        VStack(spacing: 40) {
+            Spacer()
+            triggerButton
+            statusText
+            Spacer()
+            settingsButton
+        }
+        .padding(.horizontal, 32)
+        .sheet(isPresented: $showConfig) {
+            ConfigView(viewModel: cfgVM)
+                .onDisappear { vm.refreshConfiguration() }
         }
     }
-    
-    private var gateButton: some View {
+
+    // MARK: - Subviews
+    private var triggerButton: some View {
         ZStack {
-            // Shockwave 3 (outermost)
-            Circle()
-                .stroke(buttonColor, lineWidth: 3)
-                .frame(width: 200, height: 200)
-                .scaleEffect(shockwave3Scale)
-                .opacity(shockwave3Opacity)
-            
-            // Shockwave 2 (middle)
-            Circle()
-                .stroke(buttonColor, lineWidth: 4)
-                .frame(width: 200, height: 200)
-                .scaleEffect(shockwave2Scale)
-                .opacity(shockwave2Opacity)
-            
-            // Shockwave 1 (innermost)
+            // Shockwave
             Circle()
                 .stroke(buttonColor, lineWidth: 5)
                 .frame(width: 200, height: 200)
-                .scaleEffect(shockwave1Scale)
-                .opacity(shockwave1Opacity)
-            
+                .scaleEffect(shockScale)
+                .opacity(shockOpacity)
+
             // Main button
-            Button(action: {
-                triggerShockwaveEffect()
-                Task {
-                    await viewModel.triggerGate()
+            Button {
+                triggerEffect()
+                Task { @MainActor in          // ← hop onto main actor explicitly
+                    vm.triggerGate()
                 }
-            }) {
-                Text(viewModel.buttonTitle)
-                    .font(.title2)
-                    .fontWeight(.semibold)
+            } label: {
+                Text(vm.buttonTitle)
+                    .font(.title2.bold())
                     .foregroundColor(.white)
                     .frame(width: 200, height: 200)
                     .background(buttonColor)
                     .clipShape(Circle())
-                    .scaleEffect(buttonScale * pulseScale)
-                    .animation(.easeInOut(duration: 0.4), value: viewModel.currentState)
+                    .scaleEffect(pulseScale * (vm.isButtonDisabled ? 0.95 : 1.0))
             }
-            .disabled(viewModel.isButtonDisabled)
-            .accessibilityLabel("Gate trigger button")
-            .accessibilityHint("Tap to open the gate")
+            .disabled(vm.isButtonDisabled)
         }
     }
-    
+
     private var statusText: some View {
         Text(statusMessage)
             .font(.body)
             .foregroundColor(.secondary)
             .multilineTextAlignment(.center)
     }
-    
-    private var configurationButton: some View {
-        Button("Settings") {
-            showingConfiguration = true
-        }
-        .font(.callout)
-        .foregroundColor(.blue)
-        .accessibilityLabel("Settings")
-        .accessibilityHint("Configure MQTT and ESP32 settings")
+
+    private var settingsButton: some View {
+        Button("Settings") { showConfig = true }
+            .font(.callout)
+            .foregroundColor(.blue)
     }
-    
+
+    // MARK: - Helpers
     private var buttonColor: Color {
-        switch viewModel.currentState {
-        case .ready:
-            return viewModel.isConfigured ? .green : .gray
-        case .triggering, .waitingForRelayClose:
-            return .orange
-        case .timeout, .error:
-            return .red
+        switch vm.currentState {
+        case .ready:   return vm.isConfigured ? .green : .gray
+        case .triggering, .waitingForRelayClose: return .orange
+        case .timeout, .error: return .red
         }
     }
-    
-    private var buttonScale: Double {
-        switch viewModel.currentState {
-        case .triggering, .waitingForRelayClose:
-            return 0.95
-        default:
-            return 1.0
-        }
-    }
-    
+
     private var statusMessage: String {
-        switch viewModel.currentState {
+        switch vm.currentState {
         case .ready:
-            return viewModel.isConfigured ? 
-                "Ready to open gate" : 
-                "Please configure settings first"
+            return vm.isConfigured ? "Ready to open gate"
+                                   : "Please configure settings first"
         case .triggering:
-            return "Sending trigger signal..."
+            return "Sending trigger signal…"
         case .waitingForRelayClose:
-            return "Gate is opening..."
+            return "Gate is opening…"
         case .timeout:
             return "Operation timed out. Tap to retry."
         case .error:
             return "An error occurred. Tap to retry."
         }
     }
-    
-    private func triggerShockwaveEffect() {
-        // Reset all shockwaves
-        shockwave1Scale = 1.0
-        shockwave2Scale = 1.0
-        shockwave3Scale = 1.0
-        shockwave1Opacity = 0.6
-        shockwave2Opacity = 0.4
-        shockwave3Opacity = 0.3
-        
-        // Animate shockwave 1 (starts immediately)
+
+    private func triggerEffect() {
+        shockScale   = 1
+        shockOpacity = 0.6
+
         withAnimation(.easeOut(duration: 0.6)) {
-            shockwave1Scale = 2.5
-            shockwave1Opacity = 0.0
+            shockScale   = 2.5
+            shockOpacity = 0
         }
-        
-        // Animate shockwave 2 (starts with 0.1s delay)
-        withAnimation(.easeOut(duration: 0.8).delay(0.1)) {
-            shockwave2Scale = 3.0
-            shockwave2Opacity = 0.0
-        }
-        
-        // Animate shockwave 3 (starts with 0.2s delay)
-        withAnimation(.easeOut(duration: 1.0).delay(0.2)) {
-            shockwave3Scale = 3.5
-            shockwave3Opacity = 0.0
-        }
-        
-        // Button pulse effect
-        withAnimation(.easeOut(duration: 0.1)) {
-            pulseScale = 1.15
-        }
-        withAnimation(.easeOut(duration: 0.2).delay(0.1)) {
-            pulseScale = 1.0
-        }
+
+        withAnimation(.easeOut(duration: 0.1)) { pulseScale = 1.15 }
+        withAnimation(.easeOut(duration: 0.2).delay(0.1)) { pulseScale = 1 }
     }
 }

@@ -15,4 +15,5 @@ enum GateKeeperError: Error {
     case publishFailed
     case invalidResponse
     case operationTimeout
+    case noAdapterAvailable
 }

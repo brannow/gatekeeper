@@ -7,7 +7,4 @@
 
 import Foundation
 
-enum RelayState {
-    case activated
-    case released
-}
+enum RelayState { case activated, released }

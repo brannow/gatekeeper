@@ -36,9 +36,6 @@ You are working with a senior developer with 20+ years of experience who demands
 
 ### Threading & Concurrency
 - **Main Thread Protection**: NEVER block the main thread with networking or heavy operations
-- **Structured Concurrency**: Use async/await exclusively, avoid completion handlers
-- **Actor Isolation**: Use `@MainActor` for UI updates, background actors for business logic
-- **Thread-Safe State**: Use `@Published` properties with proper MainActor isolation
 
 ## iOS/SwiftUI Specific Standards
 

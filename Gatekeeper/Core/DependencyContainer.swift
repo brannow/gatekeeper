@@ -7,34 +7,27 @@
 
 import Foundation
 
+
 final class DependencyContainer {
+
     private let logger: LoggerProtocol
     private let configManager: ConfigManagerProtocol
-    private let networkService: NetworkServiceProtocol
-    
+    private let networkService: NetworkService      // concrete type, no protocol
+
     @MainActor
     lazy var gateViewModel: GateViewModel = {
-        return GateViewModel(
-            networkService: networkService,
-            configManager: configManager,
-            logger: logger
-        )
+        GateViewModel(service: networkService)      // matches new init
     }()
-    
+
+    // If you still use ConfigViewModel, adjust its init as well
     @MainActor
     lazy var configViewModel: ConfigViewModel = {
-        return ConfigViewModel(
-            configManager: configManager,
-            logger: logger
-        )
+        ConfigViewModel(configManager: configManager, logger: logger)
     }()
-    
+
     init() {
-        self.logger = Logger()
-        self.configManager = ConfigManager(logger: logger)
-        self.networkService = NetworkService(
-            config: configManager,
-            logger: logger
-        )
+        logger       = Logger()
+        configManager = ConfigManager(logger: logger)
+        networkService = NetworkService(config: configManager, logger: logger)
     }
 }

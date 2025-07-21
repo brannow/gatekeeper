@@ -9,180 +9,79 @@ import Foundation
 import CocoaMQTT
 
 final class MQTTNetworkAdapter: NSObject, GateNetworkInterface {
-
-    private let config: MQTTConfig
+    let method: NetworkMethod = .mqtt
+    weak var delegate: NetworkAdapterDelegate?
+    private let cfg: MQTTConfig
     private let logger: LoggerProtocol
-    private var mqttClient: CocoaMQTT?
-    private var operationContinuation: CheckedContinuation<Void, Error>?
-    private var stateContinuation: AsyncStream<RelayState>.Continuation?
-    private var isConnected: Bool = false
-    private var hasReceivedResponse: Bool = false
+    private var mqtt: CocoaMQTT?
 
-    private enum Topics {
-        static let trigger = "iot/house/gate/esp32/trigger"
-        static let status  = "iot/house/gate/esp32/status"
-    }
-
-    init(config: ConfigManagerProtocol, logger: LoggerProtocol) throws {
-        guard let cfg = config.getMQTTConfig() else {
-            throw GateKeeperError.configurationMissing
-        }
-        self.config = cfg
+    init(cfg: MQTTConfig, logger: LoggerProtocol) {
+        self.cfg = cfg
         self.logger = logger
         super.init()
-        setupMQTTClient()
+        buildClient()
     }
 
-    deinit {
-        mqttClient?.disconnect()
+    private func buildClient() {
+        mqtt = CocoaMQTT(clientID: "gate-\(UUID().uuidString.prefix(8))",
+                         host: cfg.host,
+                         port: UInt16(cfg.port))
+        mqtt?.username   = cfg.username
+        mqtt?.password   = cfg.password
+        mqtt?.keepAlive  = 60
+        mqtt?.cleanSession = true
+        mqtt?.autoReconnect = false
+        mqtt?.enableSSL = true
+        mqtt?.delegate = self
     }
 
-    private func setupMQTTClient() {
-        let clientID = "mqtt-\(UUID().uuidString.prefix(8))"
-        let client   = CocoaMQTT(clientID: clientID,
-                                 host: config.host,
-                                 port: UInt16(config.port))
-        client.username   = config.username
-        client.password   = config.password
-        client.keepAlive  = 60
-        client.cleanSession = true
-        client.autoReconnect = false
-        client.delegate = self
-        client.enableSSL = true
-        mqttClient = client
-
-        logger.info("MQTT client configured",
-                    metadata: ["host": config.host,
-                               "port": String(config.port),
-                               "clientID": clientID])
-    }
-    
-    func run() async throws -> NetworkOperationResult {
-        logger.info("Starting MQTT gate trigger",
-                    metadata: ["host": config.host])
-
-        let (stream, continuation) = AsyncStream<RelayState>.makeStream()
-        stateContinuation = continuation
-
-        let operationTask = Task {
-            try await withCheckedThrowingContinuation { (operationCont: CheckedContinuation<Void, Error>) in
-                operationContinuation = operationCont
-                isConnected           = false
-                hasReceivedResponse   = false
-
-                guard let client = mqttClient else {
-                    operationCont.resume(throwing: GateKeeperError.connectionFailed)
-                    return
-                }
-                guard client.connect() else {
-                    operationCont.resume(throwing: GateKeeperError.connectionFailed)
-                    return
-                }
-            }
-        }
-
-        do {
-            try await operationTask.value
-            return NetworkOperationResult(success: true, stateUpdates: stream)
-        } catch {
-            stateContinuation?.finish()
-            throw error
+    func start() {
+        if ((mqtt?.connect()) == nil) {
+            logger.error("MQTT connection failed")
         }
     }
 
-    private func publishTriggerMessage() {
-        guard let client = mqttClient else { return }
-        guard isConnected, client.connState == .connected else {
-            operationContinuation?.resume(throwing: GateKeeperError.connectionFailed)
-            operationContinuation = nil
-            return
-        }
-
-        let payload = String(Int(Date().timeIntervalSince1970))
-        let message = CocoaMQTTMessage(topic: Topics.trigger,
-                                       string: payload,
-                                       qos: .qos0)
-        let id = client.publish(message)
-        if id < 0 {
-            operationContinuation?.resume(throwing: GateKeeperError.publishFailed)
-            operationContinuation = nil
-        }
+    func stop() {
+        mqtt?.disconnect()
     }
 
-    private func handleStatusMessage(_ message: String) {
-        if message == "1" {
-            logger.info("Relay activated")
-            stateContinuation?.yield(.activated)
-        } else if message == "0" {
-            hasReceivedResponse = true
-            stateContinuation?.yield(.released)
-            stateContinuation?.finish()
-            
-            operationContinuation?.resume()
-            operationContinuation = nil
-            stateContinuation = nil
-            mqttClient?.disconnect()
-            logger.info("Relay released")
-        }
+    private func publishTrigger() {
+        let msg = CocoaMQTTMessage(topic: "iot/house/gate/esp32/trigger",
+                                   string: String(Int(Date().timeIntervalSince1970)), qos: .qos0)
+        mqtt?.publish(msg)
     }
 }
 
-// MARK: - CocoaMQTTDelegate
 extension MQTTNetworkAdapter: CocoaMQTTDelegate {
 
     func mqtt(_ mqtt: CocoaMQTT, didConnectAck ack: CocoaMQTTConnAck) {
-        if ack == .accept {
-            isConnected = true
-            logger.info("MQTT connected", metadata: ["config": config.host])
-            mqtt.subscribe(Topics.status, qos: .qos0)
-        } else {
-            operationContinuation?.resume(throwing: GateKeeperError.connectionFailed)
-            operationContinuation = nil
-        }
+        guard ack == .accept else { delegate?.adapterDidFail(.mqttConnectionFailed); return }
+        delegate?.adapterDidConnect()
+        mqtt.subscribe("iot/house/gate/esp32/status", qos: .qos0)
+    }
+
+    func mqtt(_ mqtt: CocoaMQTT, didSubscribeTopics success: NSDictionary, failed: [String]) {
+        publishTrigger()
     }
 
     func mqtt(_ mqtt: CocoaMQTT, didReceiveMessage message: CocoaMQTTMessage, id: UInt16) {
-        if message.topic == Topics.status {
-            handleStatusMessage(message.string ?? "")
+        guard message.topic == "iot/house/gate/esp32/status",
+              let str = message.string else { return }
+        switch str {
+        case "1": delegate?.adapterDidReceive(.activated)
+        case "0": delegate?.adapterDidReceive(.released); delegate?.adapterDidComplete()
+        default: break
         }
     }
 
     func mqttDidDisconnect(_ mqtt: CocoaMQTT, withError err: Error?) {
-        isConnected = false
-        logger.warning("MQTT disconnect", error: err)
-        if let err = err, !hasReceivedResponse {
-            operationContinuation?.resume(throwing: err)
-            operationContinuation = nil
-        }
+        delegate?.adapterDidFail(.connectionFailed)
     }
 
-    // Stubbed methods the compiler requires
-    func mqtt(_ mqtt: CocoaMQTT, didPublishMessage message: CocoaMQTTMessage, id: UInt16) {
-        logger.info("MQTT didPublishMessage", metadata: ["message": message.string, "id": String(id)])
-    }
-    
-    func mqtt(_ mqtt: CocoaMQTT, didPublishAck id: UInt16) { }
-    func mqtt(_ mqtt: CocoaMQTT, didSubscribeTopics success: NSDictionary, failed: [String]) {
-        // Always log first
-        if let successDict = success as? [String: Int16] {
-            for (key, value) in successDict {
-                logger.info("MQTT didSubscribeTopic",
-                            metadata: ["topic": key, "status": String(value)])
-            }
-        } else {
-            logger.error("Failed to cast NSDictionary to [String: Int16]")
-        }
-
-        // Only publish if the status topic succeeded
-        guard let statusCode = success[Topics.status] as? Int16, statusCode == 0 else {
-            logger.warning("Status subscription failed or missing", error: nil)
-            return
-        }
-
-        publishTriggerMessage()
-    }
-    
-    func mqtt(_ mqtt: CocoaMQTT, didUnsubscribeTopics topics: [String]) { }
-    func mqttDidPing(_ mqtt: CocoaMQTT) { }
-    func mqttDidReceivePong(_ mqtt: CocoaMQTT) { }
+    // Unused protocol stubs
+    func mqtt(_ mqtt: CocoaMQTT, didPublishMessage message: CocoaMQTTMessage, id: UInt16) {}
+    func mqtt(_ mqtt: CocoaMQTT, didPublishAck id: UInt16) {}
+    func mqtt(_ mqtt: CocoaMQTT, didUnsubscribeTopics topics: [String]) {}
+    func mqttDidPing(_ mqtt: CocoaMQTT) {}
+    func mqttDidReceivePong(_ mqtt: CocoaMQTT) {}
 }

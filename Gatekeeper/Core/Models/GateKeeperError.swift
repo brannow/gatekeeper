@@ -11,10 +11,8 @@ enum GateKeeperError: Error {
     case configurationMissing
     case udpConnectionFailed
     case mqttConnectionFailed
-    case allAdaptersFailed
-    case operationTimeout
-    case operationInProgress
-    case invalidResponse
     case connectionFailed
     case publishFailed
+    case invalidResponse
+    case operationTimeout
 }

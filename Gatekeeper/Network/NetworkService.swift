@@ -8,91 +8,63 @@
 import Foundation
 import Network
 
-protocol NetworkServiceProtocol {
-    func triggerGate() async -> GateOperationResult
-}
-
-struct GateOperationResult {
-    let success: Bool
-    let method: NetworkMethod
-    let duration: TimeInterval
-    let error: GateKeeperError?
-    let stateUpdates: AsyncStream<RelayState>?
-}
-
-enum NetworkMethod {
-    case udp
-    case mqtt
-}
-
-final class NetworkService: NetworkServiceProtocol {
+final class NetworkService {
 
     private let config: ConfigManagerProtocol
     private let logger: LoggerProtocol
-    private let timeoutInterval: TimeInterval = 5
+    private var currentAdapter: GateNetworkInterface?
+
+    // delegate is *always* accessed on the main actor
+    @MainActor weak var delegate: NetworkServiceDelegate?
 
     init(config: ConfigManagerProtocol, logger: LoggerProtocol) {
-        self.config = config
-        self.logger = logger
+        self.config  = config
+        self.logger  = logger
     }
 
-    func triggerGate() async -> GateOperationResult {
-        let start = Date()
-
-        let factories: [() throws -> GateNetworkInterface] = [
-            { try SocketAdapter(config: self.config, logger: self.logger) },
-            { try MQTTNetworkAdapter(config: self.config, logger: self.logger) }
-        ]
-
-        // MARK: - Adapter execution with strict 5-second budget
-        for (index, makeAdapter) in factories.enumerated() {
-            do {
-                let adapter = try makeAdapter()
-
-                let operationResult: NetworkOperationResult = try await withTimeout(seconds: timeoutInterval) {
-                    try await adapter.run()
-                }
-
-                let duration = Date().timeIntervalSince(start)
-                let method: NetworkMethod = index == 0 ? .udp : .mqtt
-
-                logger.info("Gate opened",
-                            metadata: ["method": "\(method)",
-                                       "duration": String(format: "%.2f", duration)])
-                return GateOperationResult(success: operationResult.success,
-                                           method: method,
-                                           duration: duration,
-                                           error: nil,
-                                           stateUpdates: operationResult.stateUpdates)
-
-            } catch is CancellationError {
-                logger.warning("Adapter \(index) timed out")
-            } catch {
-                logger.warning("Adapter \(index) failed", error: error)
+    func triggerGate() {
+        // pick an adapter
+        let adapter: GateNetworkInterface
+        if let cfg = config.getESP32Config() {
+            adapter = SocketAdapter(cfg: cfg, logger: logger)
+        } else if let cfg = config.getMQTTConfig() {
+            adapter = MQTTNetworkAdapter(cfg: cfg, logger: logger)
+        } else {
+            Task { @MainActor in
+                delegate?.serviceDidFail(.configurationMissing)
             }
+            return
         }
 
-        let duration = Date().timeIntervalSince(start)
-        let error = GateKeeperError.allAdaptersFailed
-        logger.error("No adapter succeeded", error: error)
-        return GateOperationResult(success: false,
-                                   method: .mqtt,
-                                   duration: duration,
-                                   error: error,
-                                   stateUpdates: nil)
+        adapter.delegate = AdapterBridge(service: self)
+        currentAdapter   = adapter
+        adapter.start()
+    }
+}
+
+// MARK: - Bridge that keeps the adapter ignorant of @MainActor
+private final class AdapterBridge: NetworkAdapterDelegate {
+    private weak var service: NetworkService?
+
+    init(service: NetworkService) { self.service = service }
+
+    func adapterDidConnect() { /* nothing to do */ }
+
+    func adapterDidFail(_ error: GateKeeperError) {
+        Task { @MainActor [weak self] in
+            self?.service?.delegate?.serviceDidFail(error)
+        }
     }
 
-    private func withTimeout<T>(seconds: TimeInterval,
-                                operation: @escaping () async throws -> T) async throws -> T {
-        try await withThrowingTaskGroup(of: T.self) { group in
-            group.addTask { try await operation() }
-            group.addTask {
-                try await Task.sleep(for: .seconds(seconds))
-                throw GateKeeperError.operationTimeout
-            }
-            let result = try await group.next()!
-            group.cancelAll()
-            return result
+    func adapterDidReceive(_ state: RelayState) {
+        Task { @MainActor [weak self] in
+            self?.service?.delegate?.serviceDidReceive(state)
+        }
+    }
+
+    func adapterDidComplete() {
+        Task { @MainActor [weak self] in
+            self?.service?.delegate?.serviceDidComplete()
         }
     }
 }

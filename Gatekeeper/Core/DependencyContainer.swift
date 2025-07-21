@@ -33,7 +33,7 @@ final class DependencyContainer {
         self.logger = Logger()
         self.configManager = ConfigManager(logger: logger)
         self.networkService = NetworkService(
-            configManager: configManager,
+            config: configManager,
             logger: logger
         )
     }

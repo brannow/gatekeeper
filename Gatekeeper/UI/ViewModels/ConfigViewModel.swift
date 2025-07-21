@@ -10,6 +10,7 @@ import Foundation
 @MainActor
 final class ConfigViewModel: ObservableObject {
     @Published var esp32IPAddress: String = ""
+    @Published var esp32Port: String = "8080"
     @Published var mqttHost: String = "mqtt.rannow.de"
     @Published var mqttPort: String = "8883"
     @Published var mqttUsername: String = "ctl_house_user"
@@ -26,22 +27,34 @@ final class ConfigViewModel: ObservableObject {
     }
     
     var isValidIPAddress: Bool {
-        return esp32IPAddress.isEmpty || isValidIP(esp32IPAddress)
+        return esp32IPAddress.isEmpty || isValidHostAddress(esp32IPAddress)
+    }
+    
+    var isValidESP32Port: Bool {
+        guard let port = UInt16(esp32Port) else { return false }
+        return port > 0 && port <= 65535
+    }
+    
+    var isValidMqttPort: Bool {
+        guard let port = UInt16(mqttPort) else { return false }
+        return port > 0 && port <= 65535
     }
     
     var isValidConfiguration: Bool {
-        let hasValidESP32: Bool = !esp32IPAddress.isEmpty && isValidIPAddress
+        let hasValidESP32: Bool = !esp32IPAddress.isEmpty && isValidIPAddress && isValidESP32Port
         let hasValidMQTT: Bool = !mqttHost.isEmpty && 
                                 !mqttUsername.isEmpty && 
                                 !mqttPassword.isEmpty &&
-                                Int(mqttPort) != nil
+                                isValidMqttPort
         
         return hasValidESP32 || hasValidMQTT
     }
     
     func saveConfiguration() {
-        if !esp32IPAddress.isEmpty && isValidIPAddress {
-            configManager.saveESP32IP(esp32IPAddress)
+        if !esp32IPAddress.isEmpty && isValidIPAddress && isValidESP32Port,
+           let port = UInt16(esp32Port) {
+            let esp32Config = ESP32Config(host: esp32IPAddress, port: port)
+            configManager.saveESP32Config(esp32Config)
         }
         
         if !mqttHost.isEmpty && !mqttUsername.isEmpty && !mqttPassword.isEmpty,
@@ -59,8 +72,9 @@ final class ConfigViewModel: ObservableObject {
     }
     
     private func loadExistingConfiguration() {
-        if let ip = configManager.getESP32IP() {
-            esp32IPAddress = ip
+        if let esp32Config = configManager.getESP32Config() {
+            esp32IPAddress = esp32Config.host
+            esp32Port = String(esp32Config.port)
         }
         
         if let mqttConfig = configManager.getMQTTConfig() {
@@ -71,6 +85,10 @@ final class ConfigViewModel: ObservableObject {
         }
     }
     
+    private func isValidHostAddress(_ address: String) -> Bool {
+        return isValidIP(address) || isValidDomainName(address)
+    }
+    
     private func isValidIP(_ ip: String) -> Bool {
         let parts = ip.components(separatedBy: ".")
         guard parts.count == 4 else { return false }
@@ -79,5 +97,11 @@ final class ConfigViewModel: ObservableObject {
             guard let number = Int(part) else { return false }
             return number >= 0 && number <= 255
         }
+    }
+    
+    private func isValidDomainName(_ domain: String) -> Bool {
+        let domainRegex = "^[a-zA-Z0-9]([a-zA-Z0-9\\-]{0,61}[a-zA-Z0-9])?\\.[a-zA-Z]{2,}$|^[a-zA-Z0-9]([a-zA-Z0-9\\-]{0,61}[a-zA-Z0-9])?\\.local$"
+        let predicate = NSPredicate(format: "SELF MATCHES %@", domainRegex)
+        return predicate.evaluate(with: domain) || !domain.contains(".") && domain.count > 0
     }
 }

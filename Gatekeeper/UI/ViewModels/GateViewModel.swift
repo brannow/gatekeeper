@@ -43,26 +43,25 @@ final class GateViewModel: ObservableObject {
             isOperationInProgress = false
         }
         
-        do {
-            currentState = .triggering
+        currentState = .triggering
+        
+        let result: GateOperationResult = await networkService.triggerGate()
+        lastOperation = result
+        
+        if result.success {
+            logger.info("Gate operation started successfully", metadata: [
+                "method": String(describing: result.method),
+                "duration": String(format: "%.2f", result.duration)
+            ])
             
-            let result: GateOperationResult = try await networkService.triggerGate()
-            lastOperation = result
-            
-            if result.success {
-                currentState = .waitingForRelayClose
-                try? await Task.sleep(nanoseconds: 500_000_000)
-                currentState = .ready
-                
-                logger.info("Gate operation completed successfully", metadata: [
-                    "method": String(describing: result.method),
-                    "duration": String(format: "%.2f", result.duration)
-                ])
-            } else {
-                await handleError(result.error ?? GateKeeperError.allAdaptersFailed)
+            // Listen to state updates from the network operation
+            if let stateUpdates = result.stateUpdates {
+                for await state in stateUpdates {
+                    await handleRelayStateUpdate(state)
+                }
             }
-        } catch {
-            await handleError(error as? GateKeeperError ?? GateKeeperError.allAdaptersFailed)
+        } else {
+            await handleError(result.error ?? GateKeeperError.allAdaptersFailed)
         }
     }
     
@@ -71,12 +70,12 @@ final class GateViewModel: ObservableObject {
     }
     
     private func checkConfiguration() {
-        let hasESP32IP: Bool = configManager.getESP32IP() != nil
+        let hasESP32Config: Bool = configManager.getESP32Config() != nil
         let hasMQTTConfig: Bool = configManager.getMQTTConfig() != nil
         
-        isConfigured = hasESP32IP || hasMQTTConfig
+        isConfigured = hasESP32Config || hasMQTTConfig
         logger.info("Configuration status", metadata: [
-            "esp32_configured": String(hasESP32IP),
+            "esp32_configured": String(hasESP32Config),
             "mqtt_configured": String(hasMQTTConfig)
         ])
     }
@@ -112,6 +111,17 @@ final class GateViewModel: ObservableObject {
             return true
         case .timeout, .error:
             return false
+        }
+    }
+    
+    private func handleRelayStateUpdate(_ state: RelayState) async {
+        switch state {
+        case .activated:
+            currentState = .waitingForRelayClose
+            logger.info("Relay activated - waiting for release")
+        case .released:
+            currentState = .ready
+            logger.info("Relay released - gate operation complete")
         }
     }
 }

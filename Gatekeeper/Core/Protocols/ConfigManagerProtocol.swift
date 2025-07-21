@@ -9,7 +9,7 @@ import Foundation
 
 protocol ConfigManagerProtocol {
     func saveMQTTConfig(_ config: MQTTConfig)
-    func saveESP32IP(_ ip: String)
+    func saveESP32Config(_ config: ESP32Config)
     func getMQTTConfig() -> MQTTConfig?
-    func getESP32IP() -> String?
+    func getESP32Config() -> ESP32Config?
 }

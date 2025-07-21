@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		5F1C25602E2E1380002E1578 /* CocoaMQTT in Frameworks */ = {isa = PBXBuildFile; productRef = 5F1C255F2E2E1380002E1578 /* CocoaMQTT */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		5F1C25042E2DC90A002E1578 /* Gatekeeper.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Gatekeeper.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -23,6 +27,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				5F1C25602E2E1380002E1578 /* CocoaMQTT in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -65,6 +70,7 @@
 			);
 			name = Gatekeeper;
 			packageProductDependencies = (
+				5F1C255F2E2E1380002E1578 /* CocoaMQTT */,
 			);
 			productName = Gatekeeper;
 			productReference = 5F1C25042E2DC90A002E1578 /* Gatekeeper.app */;
@@ -94,6 +100,9 @@
 			);
 			mainGroup = 5F1C24FB2E2DC90A002E1578;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				5F1C255E2E2E1380002E1578 /* XCRemoteSwiftPackageReference "CocoaMQTT" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 5F1C25052E2DC90A002E1578 /* Products */;
 			projectDirPath = "";
@@ -332,6 +341,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		5F1C255E2E2E1380002E1578 /* XCRemoteSwiftPackageReference "CocoaMQTT" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/emqx/CocoaMQTT.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.1.9;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		5F1C255F2E2E1380002E1578 /* CocoaMQTT */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 5F1C255E2E2E1380002E1578 /* XCRemoteSwiftPackageReference "CocoaMQTT" */;
+			productName = CocoaMQTT;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 5F1C24FC2E2DC90A002E1578 /* Project object */;
 }

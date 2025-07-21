@@ -50,21 +50,42 @@ struct ConfigView: View {
                 .font(.headline)
                 .foregroundColor(.primary)
             
-            VStack(alignment: .leading, spacing: 8) {
-                Text("IP Address")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+            VStack(spacing: 16) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Host Address")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    
+                    TextField("192.168.1.100", text: $viewModel.esp32IPAddress)
+                        .textFieldStyle(.roundedBorder)
+                        .keyboardType(.URL)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled(true)
+                        .accessibilityLabel("ESP32 Host Address")
+                    
+                    if !viewModel.isValidIPAddress {
+                        Text("Please enter a valid host address")
+                            .font(.caption)
+                            .foregroundColor(.red)
+                    }
+                }
                 
-                TextField("192.168.1.100", text: $viewModel.esp32IPAddress)
-                    .textFieldStyle(.roundedBorder)
-                    .keyboardType(.decimalPad)
-                    .autocorrectionDisabled(true)
-                    .accessibilityLabel("ESP32 IP Address")
-                
-                if !viewModel.isValidIPAddress {
-                    Text("Please enter a valid IP address")
-                        .font(.caption)
-                        .foregroundColor(.red)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Port")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    
+                    TextField("8080", text: $viewModel.esp32Port)
+                        .textFieldStyle(.roundedBorder)
+                        .keyboardType(.numberPad)
+                        .autocorrectionDisabled(true)
+                        .accessibilityLabel("ESP32 Port")
+                    
+                    if !viewModel.isValidESP32Port {
+                        Text("Please enter a valid port (1-65535)")
+                            .font(.caption)
+                            .foregroundColor(.red)
+                    }
                 }
             }
         }

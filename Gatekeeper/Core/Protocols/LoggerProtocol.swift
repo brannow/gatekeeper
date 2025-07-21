@@ -8,7 +8,10 @@
 import Foundation
 
 protocol LoggerProtocol {
-    func info(_ message: String, metadata: [String: String])
+    func info(_ message: String)
+    func info(_ message: String, metadata: [String: String?])
+    func warning(_ message: String)
     func warning(_ message: String, error: Error?)
-    func error(_ message: String, error: Error)
+    func error(_ message: String)
+    func error(_ message: String, error: Error?)
 }

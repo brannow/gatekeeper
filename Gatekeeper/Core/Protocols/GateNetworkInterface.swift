@@ -7,12 +7,11 @@
 
 import Foundation
 
-protocol GateNetworkInterface {
-    var delegate: GateNetworkDelegate? { get set }
-    func open() async throws
+struct NetworkOperationResult {
+    let success: Bool
+    let stateUpdates: AsyncStream<RelayState>
 }
 
-protocol GateNetworkDelegate: AnyObject {
-    func gateDidReceiveRelayState(_ state: RelayState)
-    func gateDidEncounterError(_ error: GateKeeperError)
+protocol GateNetworkInterface {
+    func run() async throws -> NetworkOperationResult
 }

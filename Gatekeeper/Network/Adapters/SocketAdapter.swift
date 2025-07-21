@@ -9,56 +9,62 @@ import Foundation
 import Network
 
 final class SocketAdapter: GateNetworkInterface {
-    weak var delegate: GateNetworkDelegate?
-    
-    private let ipAddress: String
+
+    private let hostAddress: String
     private let port: UInt16
     private let logger: LoggerProtocol
-    private let timeoutInterval: TimeInterval = 2.0
-    
-    init(ipAddress: String, port: UInt16 = 8080, logger: LoggerProtocol) {
-        self.ipAddress = ipAddress
-        self.port = port
-        self.logger = logger
-    }
-    
-    func open() async throws {
-        logger.info("Starting UDP gate trigger", metadata: ["ip": ipAddress, "port": String(port)])
-        
-        return try await withThrowingTaskGroup(of: Void.self) { group in
-            group.addTask {
-                try await self.performUDPOperation()
-            }
-            
-            group.addTask {
-                try await Task.sleep(nanoseconds: UInt64(self.timeoutInterval * 1_000_000_000))
-                throw GateKeeperError.operationTimeout
-            }
-            
-            try await group.next()
-            group.cancelAll()
+
+    init(config: ConfigManagerProtocol, logger: LoggerProtocol) throws {
+        guard let esp32Config = config.getESP32Config() else {
+            throw GateKeeperError.configurationMissing
         }
-    }
-    
-    private func performUDPOperation() async throws {
-        let connection: NWConnection = try await createConnection()
-        defer { connection.cancel() }
-        
-        try await sendTrigger(connection: connection)
-        try await receiveResponse(connection: connection)
-        
-        logger.info("UDP operation completed successfully", metadata: [:])
-    }
-    
-    private func createConnection() async throws -> NWConnection {
-        let host: NWEndpoint.Host = NWEndpoint.Host(ipAddress)
-        guard let port: NWEndpoint.Port = NWEndpoint.Port(rawValue: port) else {
+        guard Self.isWiFiAvailable() else {
             throw GateKeeperError.udpConnectionFailed
         }
+        self.hostAddress = esp32Config.host
+        self.port = esp32Config.port
+        self.logger = logger
+    }
+
+    func run() async throws -> NetworkOperationResult {
+        logger.info("Starting UDP gate trigger",
+                    metadata: ["host": hostAddress, "port": String(port)])
+
+        let (stream, continuation) = AsyncStream<RelayState>.makeStream()
         
-        let endpoint: NWEndpoint = NWEndpoint.hostPort(host: host, port: port)
-        let connection: NWConnection = NWConnection(to: endpoint, using: .udp)
-        
+        Task {
+            do {
+                try await performUDPOperation(stateContinuation: continuation)
+                logger.info("UDP operation completed successfully",
+                            metadata: ["host": hostAddress])
+            } catch {
+                continuation.finish()
+                throw error
+            }
+        }
+
+        return NetworkOperationResult(success: true, stateUpdates: stream)
+    }
+
+    private func performUDPOperation(stateContinuation: AsyncStream<RelayState>.Continuation) async throws {
+        let connection = try await createConnection()
+        defer { connection.cancel() }
+
+        try await sendTrigger(connection: connection)
+        try await receiveResponse(connection: connection, stateContinuation: stateContinuation)
+
+        logger.info("UDP operation completed successfully", metadata: ["host": hostAddress])
+    }
+
+    private func createConnection() async throws -> NWConnection {
+        let host = NWEndpoint.Host(hostAddress)
+        guard let portEndpoint = NWEndpoint.Port(rawValue: port) else {
+            throw GateKeeperError.udpConnectionFailed
+        }
+        let connection = NWConnection(host: host,
+                                      port: portEndpoint,
+                                      using: .udp)
+
         return try await withCheckedThrowingContinuation { continuation in
             connection.stateUpdateHandler = { state in
                 switch state {
@@ -73,12 +79,11 @@ final class SocketAdapter: GateNetworkInterface {
             connection.start(queue: .global())
         }
     }
-    
+
     private func sendTrigger(connection: NWConnection) async throws {
-        let triggerData = Data([0x01])
-        
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            connection.send(content: triggerData, completion: .contentProcessed { error in
+            connection.send(content: Data([0x01]),
+                            completion: .contentProcessed { error in
                 if let error = error {
                     continuation.resume(throwing: error)
                 } else {
@@ -86,17 +91,16 @@ final class SocketAdapter: GateNetworkInterface {
                 }
             })
         }
-        
-        logger.info("UDP trigger sent", metadata: [:])
+        logger.info("UDP trigger sent")
     }
-    
-    private func receiveResponse(connection: NWConnection) async throws {
-        var hasReceivedActivated = false
-        var hasReceivedReleased = false
-        
-        while !hasReceivedReleased {
-            let data: Data = try await withCheckedThrowingContinuation { continuation in
-                connection.receive(minimumIncompleteLength: 1, maximumLength: 1) { data, _, isComplete, error in
+
+    private func receiveResponse(connection: NWConnection, stateContinuation: AsyncStream<RelayState>.Continuation) async throws {
+        var released  = false
+
+        while !released {
+            let data = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Data, Error>) in
+                connection.receive(minimumIncompleteLength: 1,
+                                   maximumLength: 1) { data, _, isComplete, error in
                     if let error = error {
                         continuation.resume(throwing: error)
                     } else if let data = data, !data.isEmpty {
@@ -106,31 +110,33 @@ final class SocketAdapter: GateNetworkInterface {
                     }
                 }
             }
-            
-            guard let byte = data.first else {
-                throw GateKeeperError.invalidResponse
-            }
-            
-            switch byte {
+
+            switch data.first {
             case 0x01:
-                if !hasReceivedActivated {
-                    hasReceivedActivated = true
-                    await MainActor.run {
-                        self.delegate?.gateDidReceiveRelayState(.activated)
-                    }
-                    logger.info("Relay activated", metadata: [:])
-                }
+                stateContinuation.yield(.activated)
+                logger.info("Relay activated")
             case 0x00:
-                if hasReceivedActivated && !hasReceivedReleased {
-                    hasReceivedReleased = true
-                    await MainActor.run {
-                        self.delegate?.gateDidReceiveRelayState(.released)
-                    }
-                    logger.info("Relay released", metadata: [:])
-                }
+                released = true
+                stateContinuation.yield(.released)
+                stateContinuation.finish()
+                logger.info("Relay released")
             default:
-                logger.warning("Unexpected UDP response byte", error: nil)
+                logger.warning("Unexpected UDP response byte")
             }
         }
+    }
+
+    private static func isWiFiAvailable() -> Bool {
+        let monitor = NWPathMonitor()
+        let semaphore = DispatchSemaphore(value: 0)
+        var ok = false
+        monitor.pathUpdateHandler = { path in
+            ok = path.status == .satisfied && path.usesInterfaceType(.wifi)
+            semaphore.signal()
+        }
+        monitor.start(queue: .global())
+        semaphore.wait()
+        monitor.cancel()
+        return ok
     }
 }

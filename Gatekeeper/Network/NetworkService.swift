@@ -9,7 +9,7 @@ import Foundation
 import Network
 
 protocol NetworkServiceProtocol {
-    func triggerGate() async throws -> GateOperationResult
+    func triggerGate() async -> GateOperationResult
 }
 
 struct GateOperationResult {
@@ -17,6 +17,7 @@ struct GateOperationResult {
     let method: NetworkMethod
     let duration: TimeInterval
     let error: GateKeeperError?
+    let stateUpdates: AsyncStream<RelayState>?
 }
 
 enum NetworkMethod {
@@ -25,92 +26,73 @@ enum NetworkMethod {
 }
 
 final class NetworkService: NetworkServiceProtocol {
-    private let configManager: ConfigManagerProtocol
+
+    private let config: ConfigManagerProtocol
     private let logger: LoggerProtocol
-    private let monitor: NWPathMonitor
-    
-    init(configManager: ConfigManagerProtocol, logger: LoggerProtocol) {
-        self.configManager = configManager
+    private let timeoutInterval: TimeInterval = 5
+
+    init(config: ConfigManagerProtocol, logger: LoggerProtocol) {
+        self.config = config
         self.logger = logger
-        self.monitor = NWPathMonitor()
-        startNetworkMonitoring()
     }
-    
-    func triggerGate() async throws -> GateOperationResult {
-        let startTime: Date = Date()
-        
-        do {
-            let method: NetworkMethod = try await performGateTrigger()
-            let duration: TimeInterval = Date().timeIntervalSince(startTime)
-            
-            logger.info("Gate operation completed: ", metadata: [
-                "method": String(describing: method),
-                "duration": String(format: "%.2f", duration)
-            ])
-            
-            return GateOperationResult(
-                success: true,
-                method: method,
-                duration: duration,
-                error: nil
-            )
-        } catch let error as GateKeeperError {
-            let duration: TimeInterval = Date().timeIntervalSince(startTime)
-            logger.error("Gate operation failed: ", error: error)
-            
-            return GateOperationResult(
-                success: false,
-                method: .udp,
-                duration: duration,
-                error: error
-            )
+
+    func triggerGate() async -> GateOperationResult {
+        let start = Date()
+
+        let factories: [() throws -> GateNetworkInterface] = [
+            { try SocketAdapter(config: self.config, logger: self.logger) },
+            { try MQTTNetworkAdapter(config: self.config, logger: self.logger) }
+        ]
+
+        // MARK: - Adapter execution with strict 5-second budget
+        for (index, makeAdapter) in factories.enumerated() {
+            do {
+                let adapter = try makeAdapter()
+
+                let operationResult: NetworkOperationResult = try await withTimeout(seconds: timeoutInterval) {
+                    try await adapter.run()
+                }
+
+                let duration = Date().timeIntervalSince(start)
+                let method: NetworkMethod = index == 0 ? .udp : .mqtt
+
+                logger.info("Gate opened",
+                            metadata: ["method": "\(method)",
+                                       "duration": String(format: "%.2f", duration)])
+                return GateOperationResult(success: operationResult.success,
+                                           method: method,
+                                           duration: duration,
+                                           error: nil,
+                                           stateUpdates: operationResult.stateUpdates)
+
+            } catch is CancellationError {
+                logger.warning("Adapter \(index) timed out")
+            } catch {
+                logger.warning("Adapter \(index) failed", error: error)
+            }
         }
+
+        let duration = Date().timeIntervalSince(start)
+        let error = GateKeeperError.allAdaptersFailed
+        logger.error("No adapter succeeded", error: error)
+        return GateOperationResult(success: false,
+                                   method: .mqtt,
+                                   duration: duration,
+                                   error: error,
+                                   stateUpdates: nil)
     }
-    
-    private func performGateTrigger() async throws -> NetworkMethod {
-        if isWiFiAvailable() {
-            return try await attemptUDPTrigger()
-        } else {
-            return try await attemptMQTTTrigger()
+
+    private func withTimeout<T>(seconds: TimeInterval,
+                                operation: @escaping () async throws -> T) async throws -> T {
+        try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask { try await operation() }
+            group.addTask {
+                try await Task.sleep(for: .seconds(seconds))
+                throw GateKeeperError.operationTimeout
+            }
+            let result = try await group.next()!
+            group.cancelAll()
+            return result
         }
-    }
-    
-    private func attemptUDPTrigger() async throws -> NetworkMethod {
-        guard let ipAddress: String = configManager.getESP32IP() else {
-            logger.warning("UDP config missing, falling back to MQTT", error: nil)
-            return try await attemptMQTTTrigger()  // Fallback, don't throw
-        }
-        
-        logger.info("Attempting UDP trigger", metadata: ["method": "udp"])
-        
-        do {
-            let adapter = SocketAdapter(ipAddress: ipAddress, logger: logger)
-            try await adapter.open()
-            return .udp
-        } catch {
-            logger.warning("UDP failed, falling back to MQTT", error: error)
-            return try await attemptMQTTTrigger()
-        }
-    }
-    
-    private func attemptMQTTTrigger() async throws -> NetworkMethod {
-        guard let mqttConfig: MQTTConfig = configManager.getMQTTConfig() else {
-            throw GateKeeperError.configurationMissing
-        }
-        
-        logger.info("Attempting MQTT trigger", metadata: ["method": "mqtt"])
-        
-        let adapter = MQTTNetworkAdapter(config: mqttConfig, logger: logger)
-        try await adapter.open()
-        return .mqtt
-    }
-    
-    private func isWiFiAvailable() -> Bool {
-        return monitor.currentPath.status == .satisfied && 
-               monitor.currentPath.usesInterfaceType(.wifi)
-    }
-    
-    private func startNetworkMonitoring() {
-        monitor.start(queue: DispatchQueue.global(qos: .background))
     }
 }

@@ -15,4 +15,6 @@ enum GateKeeperError: Error {
     case operationTimeout
     case operationInProgress
     case invalidResponse
+    case connectionFailed
+    case publishFailed
 }

@@ -14,7 +14,7 @@ final class ConfigManager: ConfigManagerProtocol {
     
     private enum Keys {
         static let esp32IP = "esp32_ip_address"
-        static let udpPort = "udp_port"
+        static let esp32Port = "esp32_port"
         static let mqttHost = "mqtt_host"
         static let mqttPort = "mqtt_port"
     }
@@ -40,14 +40,15 @@ final class ConfigManager: ConfigManagerProtocol {
         logger.info("MQTT configuration saved", metadata: ["host": config.host])
     }
     
-    func saveESP32IP(_ ip: String) {
-        guard isValidIPAddress(ip) else {
-            logger.warning("Invalid IP address format", error: nil)
+    func saveESP32Config(_ config: ESP32Config) {
+        guard isValidHostAddress(config.host) else {
+            logger.warning("Invalid host address format", error: nil)
             return
         }
         
-        userDefaults.set(ip, forKey: Keys.esp32IP)
-        logger.info("ESP32 IP address saved", metadata: ["ip": ip])
+        userDefaults.set(config.host, forKey: Keys.esp32IP)
+        userDefaults.set(config.port, forKey: Keys.esp32Port)
+        logger.info("ESP32 configuration saved", metadata: ["host": config.host, "port": String(config.port)])
     }
     
     func getMQTTConfig() -> MQTTConfig? {
@@ -62,8 +63,13 @@ final class ConfigManager: ConfigManagerProtocol {
         return MQTTConfig(host: host, port: port, username: username, password: password)
     }
     
-    func getESP32IP() -> String? {
-        return userDefaults.string(forKey: Keys.esp32IP)
+    func getESP32Config() -> ESP32Config? {
+        guard let host = userDefaults.string(forKey: Keys.esp32IP) else {
+            return nil
+        }
+        
+        let port = userDefaults.object(forKey: Keys.esp32Port) as? UInt16 ?? 8080
+        return ESP32Config(host: host, port: port)
     }
     
     private func saveToKeychain(key: String, value: String) {
@@ -105,6 +111,10 @@ final class ConfigManager: ConfigManagerProtocol {
         return value
     }
     
+    private func isValidHostAddress(_ address: String) -> Bool {
+        return isValidIPAddress(address) || isValidDomainName(address)
+    }
+    
     private func isValidIPAddress(_ ip: String) -> Bool {
         let parts: [String] = ip.components(separatedBy: ".")
         guard parts.count == 4 else { return false }
@@ -113,5 +123,11 @@ final class ConfigManager: ConfigManagerProtocol {
             guard let number = Int(part) else { return false }
             return number >= 0 && number <= 255
         }
+    }
+    
+    private func isValidDomainName(_ domain: String) -> Bool {
+        let domainRegex = "^[a-zA-Z0-9]([a-zA-Z0-9\\-]{0,61}[a-zA-Z0-9])?\\.[a-zA-Z]{2,}$|^[a-zA-Z0-9]([a-zA-Z0-9\\-]{0,61}[a-zA-Z0-9])?\\.local$"
+        let predicate = NSPredicate(format: "SELF MATCHES %@", domainRegex)
+        return predicate.evaluate(with: domain) || !domain.contains(".") && domain.count > 0
     }
 }

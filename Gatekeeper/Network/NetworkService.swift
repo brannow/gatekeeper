@@ -13,11 +13,17 @@ final class NetworkService {
     // MARK: - Dependencies
     private let config : ConfigManagerProtocol
     public let logger : LoggerProtocol
+    
+    // MARK: - Wifi Check
+    private let monitor = NWPathMonitor()
+    private let monitorQueue = DispatchQueue(label: "wifi.monitor")
+    private var wifiAvailable = false
 
     // MARK: - Adapter chain
     public var currentIndex = 0
     public var currentAdapter: GateNetworkInterface?
     public var isRunning = false
+    private lazy var bridge = AdapterBridge(service: self)
 
     /// Ordered list of adapter *factories*.
     /// Add / reorder / remove entries at runtime if you wish.
@@ -35,6 +41,18 @@ final class NetworkService {
     init(config: ConfigManagerProtocol, logger: LoggerProtocol) {
         self.config = config
         self.logger = logger
+        self.monitorWifiStatus()
+    }
+    
+    private func monitorWifiStatus() {
+        monitor.pathUpdateHandler = { [weak self] path in
+                let reachable = path.usesInterfaceType(.wifi) || path.usesInterfaceType(.wiredEthernet)
+                Task { @MainActor in
+                    self?.wifiAvailable = reachable
+                    self?.logger.info("Wi-Fi / Ethernet reachability changed – some adapters might not work anymore")
+                }
+            }
+            monitor.start(queue: monitorQueue)
     }
 
     // MARK: - Entry point
@@ -68,10 +86,17 @@ final class NetworkService {
             tryNext()
             return
         }
+        
+        if adapter.requireWifi() && !wifiAvailable {
+            cleanupAfterAdapter(adapter)
+            currentIndex += 1
+            tryNext()
+            return
+        }
 
         // 4. Wire up and start
-        adapter.delegate = AdapterBridge(service: self)
-        currentAdapter   = adapter
+        adapter.delegate = bridge
+        currentAdapter = adapter
         timeout?.cancel()
         timeout = TimeoutTask(after: timeoutSeconds) { [weak self] in
             Task { @MainActor in

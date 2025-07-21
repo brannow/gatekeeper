@@ -15,11 +15,16 @@ final class SocketAdapter: GateNetworkInterface {
     private let port: UInt16
     private let logger: LoggerProtocol
     private var conn: NWConnection?
+    private let socketQueue = DispatchQueue(label: "socket.udp")
 
     init(cfg: ESP32Config, logger: LoggerProtocol) {
         self.host = cfg.host
         self.port = cfg.port
         self.logger = logger
+    }
+    
+    func requireWifi() -> Bool {
+        return true
     }
 
     func start() {
@@ -30,13 +35,15 @@ final class SocketAdapter: GateNetworkInterface {
             switch state {
             case .ready:
                 self.delegate?.adapterDidConnect(self)
+                self.sendTrigger()
             case .failed:
                 self.delegate?.adapterDidFail(self, .udpConnectionFailed)
             default:
                 break
             }
         }
-        conn?.start(queue: .main)
+        
+        conn?.start(queue: socketQueue)
     }
 
     func stop() {
@@ -56,23 +63,33 @@ final class SocketAdapter: GateNetworkInterface {
     }
 
     private func receive() {
-        conn?.receive(minimumIncompleteLength: 1, maximumLength: 1) { [weak self] data, _, _, error in
-            guard let self else { return }
-            if error != nil {
-                self.delegate?.adapterDidFail(self, .invalidResponse)
-                return
+        conn?.receive(
+            minimumIncompleteLength: 1,
+            maximumLength: 1,
+            completion: { [weak self] (data: Data?, _, isComplete: Bool, error: NWError?) in
+                guard let self else { return }
+
+                if error != nil {
+                    self.delegate?.adapterDidFail(self, .invalidResponse)
+                    return
+                }
+
+                guard let byte = data?.first else {
+                    if !isComplete { self.receive() }
+                    return
+                }
+                
+                switch byte {
+                case 0x01:
+                    self.delegate?.adapterDidReceive(self, .activated)
+                    self.receive()
+                case 0x00:
+                    self.delegate?.adapterDidReceive(self, .released)
+                    self.delegate?.adapterDidComplete(self)
+                default:
+                    self.delegate?.adapterDidFail(self, .invalidResponse)
+                }
             }
-            guard let byte = data?.first else { return }
-            switch byte {
-            case 0x01:
-                self.delegate?.adapterDidReceive(self, .activated)
-                self.receive()
-            case 0x00:
-                self.delegate?.adapterDidReceive(self, .released)
-                self.delegate?.adapterDidComplete(self)
-            default:
-                self.delegate?.adapterDidFail(self, .invalidResponse)
-            }
-        }
+        )
     }
 }

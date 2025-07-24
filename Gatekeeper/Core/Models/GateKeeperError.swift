@@ -11,6 +11,7 @@ enum GateKeeperError: Error {
     case configurationMissing
     case udpConnectionFailed
     case mqttConnectionFailed
+    case keychainError
     case connectionFailed
     case publishFailed
     case invalidResponse

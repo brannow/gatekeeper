@@ -11,6 +11,8 @@ import Security
 final class ConfigManager: ConfigManagerProtocol {
     private let userDefaults: UserDefaults
     private let logger: LoggerProtocol
+    private var mqttConfig: MQTTConfig?
+    private var esp32Config: ESP32Config?
     
     private enum Keys {
         static let esp32IP = "esp32_ip_address"
@@ -29,16 +31,26 @@ final class ConfigManager: ConfigManagerProtocol {
     init(userDefaults: UserDefaults = .standard, logger: LoggerProtocol) {
         self.userDefaults = userDefaults
         self.logger = logger
+        buildConfigs()
+    }
+    
+    private func buildConfigs() {
+        mqttConfig = getMQTTConfig()
+        esp32Config = getESP32Config()
     }
     
     func saveMQTTConfig(_ config: MQTTConfig) {
         userDefaults.set(config.host, forKey: Keys.mqttHost)
         userDefaults.set(config.port, forKey: Keys.mqttPort)
+        mqttConfig = nil
         
-        saveToKeychain(key: KeychainKeys.mqttUsername, value: config.username)
-        saveToKeychain(key: KeychainKeys.mqttPassword, value: config.password)
-        
-        logger.info("MQTT configuration saved", metadata: ["host": config.host])
+        do {
+            try saveToKeychain(key: KeychainKeys.mqttUsername, value: config.username)
+            try saveToKeychain(key: KeychainKeys.mqttPassword, value: config.password)
+            logger.info("MQTT configuration saved", metadata: ["host": config.host])
+        } catch {
+            logger.error("Failed to save MQTT credentials", error: error)
+        }
     }
     
     func saveESP32Config(_ config: ESP32Config) {
@@ -49,6 +61,7 @@ final class ConfigManager: ConfigManagerProtocol {
         
         userDefaults.set(config.host, forKey: Keys.esp32IP)
         userDefaults.set(config.port, forKey: Keys.esp32Port)
+        esp32Config = nil
         logger.info("ESP32 configuration saved", metadata: ["host": config.host, "port": String(config.port)])
     }
     
@@ -56,7 +69,12 @@ final class ConfigManager: ConfigManagerProtocol {
         guard let host: String = userDefaults.string(forKey: Keys.mqttHost),
               let username: String = getFromKeychain(key: KeychainKeys.mqttUsername),
               let password: String = getFromKeychain(key: KeychainKeys.mqttPassword) else {
+            mqttConfig = nil
             return nil
+        }
+        
+        if (mqttConfig != nil) {
+            return mqttConfig
         }
         
         let port: UInt16 = userDefaults.object(forKey: Keys.mqttPort) as? UInt16 ?? 8883
@@ -66,7 +84,12 @@ final class ConfigManager: ConfigManagerProtocol {
     
     func getESP32Config() -> ESP32Config? {
         guard let host = userDefaults.string(forKey: Keys.esp32IP) else {
+            esp32Config = nil
             return nil
+        }
+        
+        if (esp32Config != nil) {
+            return esp32Config
         }
         
         let port = userDefaults.object(forKey: Keys.esp32Port) as? UInt16 ?? 8080
@@ -74,7 +97,6 @@ final class ConfigManager: ConfigManagerProtocol {
     }
     
     func getReachabilityTargets() -> [PingTarget]? {
-        // Generate targets with config objects
         var targets: [PingTarget] = []
         
         if let esp32Config = getESP32Config() {
@@ -88,7 +110,27 @@ final class ConfigManager: ConfigManagerProtocol {
         return targets.isEmpty ? nil : targets
     }
     
-    private func saveToKeychain(key: String, value: String) {
+    func areAllConfigsUnreachable() -> Bool {
+        guard let targets = getReachabilityTargets() else {
+            return true          // nil → no targets → vacuously unreachable
+        }
+
+        if targets.isEmpty {     // empty → vacuously unreachable
+            return true
+        }
+
+        // If ANY target is reachable (.connected / .connecting) → NOT all unreachable
+        return !targets.contains { (target: PingTarget) -> Bool in
+            switch target.config.reachabilityStatus {
+            case .connected:
+                return true
+            default:
+                return false
+            }
+        }
+    }
+    
+    private func saveToKeychain(key: String, value: String) throws {
         let data: Data = value.data(using: .utf8) ?? Data()
         
         let query: [String: Any] = [
@@ -102,7 +144,9 @@ final class ConfigManager: ConfigManagerProtocol {
         
         let status: OSStatus = SecItemAdd(query as CFDictionary, nil)
         if status != errSecSuccess {
-            logger.error("Failed to save to keychain", error: NSError(domain: NSOSStatusErrorDomain, code: Int(status)))
+            let error = NSError(domain: NSOSStatusErrorDomain, code: Int(status))
+            logger.error("Failed to save to keychain", error: error)
+            throw GateKeeperError.keychainError
         }
     }
     

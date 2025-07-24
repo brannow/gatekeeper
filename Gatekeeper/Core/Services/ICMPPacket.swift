@@ -12,7 +12,6 @@ struct ICMPHeader {
     var code: UInt8
     var checksum: UInt16
     var identifier: UInt16
-    var sequenceNumber: UInt16
 }
 
 extension ICMPHeader {
@@ -20,12 +19,11 @@ extension ICMPHeader {
     static let echoReply: UInt8 = 0
     static let headerSize = MemoryLayout<ICMPHeader>.size
     
-    init(type: UInt8, code: UInt8, identifier: UInt16, sequenceNumber: UInt16) {
+    init(type: UInt8, code: UInt8, identifier: UInt16) {
         self.type = type
         self.code = code
         self.checksum = 0
         self.identifier = identifier.bigEndian
-        self.sequenceNumber = sequenceNumber.bigEndian
     }
     
     mutating func calculateChecksum(data: Data? = nil) {
@@ -96,8 +94,8 @@ struct ICMPPacket {
     let data: Data
     
     /// Create new ICMP packet for sending (calculates checksum)
-    init(type: UInt8, code: UInt8, identifier: UInt16, sequenceNumber: UInt16, data: Data = Data()) {
-        var header = ICMPHeader(type: type, code: code, identifier: identifier, sequenceNumber: sequenceNumber)
+    init(type: UInt8, code: UInt8, identifier: UInt16, data: Data = Data()) {
+        var header = ICMPHeader(type: type, code: code, identifier: identifier)
         header.calculateChecksum(data: data)
         
         self.header = header

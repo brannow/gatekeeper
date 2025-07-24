@@ -5,7 +5,7 @@ final class NetworkService {
 
     // MARK: - Timeout
     private var timeout: TimeoutTask?
-    private let timeoutSeconds: TimeInterval = 10
+    private let timeoutSeconds: TimeInterval = 5
     
     // MARK: - Public API
     @MainActor weak var delegate: NetworkServiceDelegate?

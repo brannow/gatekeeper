@@ -12,7 +12,7 @@ class MQTTConfig {
     let port: UInt16
     let username: String
     let password: String
-    var isReachable: Bool = false
+    var reachabilityStatus: ReachabilityStatus = .unknown
     
     init(host: String, port: UInt16, username: String, password: String) {
         self.host = host

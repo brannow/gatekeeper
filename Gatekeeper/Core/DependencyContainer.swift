@@ -20,8 +20,9 @@ final class DependencyContainer {
         GateViewModel(
             service: networkService,
             config: configManager,
-            reachabilityService: reachabilityService
-        )      // matches new init
+            reachabilityService: reachabilityService,
+            logger: logger
+        )
     }()
 
     // If you still use ConfigViewModel, adjust its init as well

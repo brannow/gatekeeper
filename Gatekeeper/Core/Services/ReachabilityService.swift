@@ -12,7 +12,6 @@ final class ReachabilityService: ReachabilityServiceProtocol {
     @MainActor weak var delegate: ReachabilityServiceDelegate?
     
     private let logger: LoggerProtocol
-    private var sequenceNumber: UInt16 = 0
     private let identifier: UInt16
     private let timeout: TimeInterval = 3.0
     private let pathMonitor = NWPathMonitor()
@@ -75,12 +74,10 @@ final class ReachabilityService: ReachabilityServiceProtocol {
         addr.sin_family = sa_family_t(AF_INET)
         inet_pton(AF_INET, ipAddress, &addr.sin_addr)
         
-        sequenceNumber += 1
         let packet = ICMPPacket(
             type: ICMPHeader.echoRequest,
             code: 0,
             identifier: identifier,
-            sequenceNumber: sequenceNumber,
             data: Data("Gatekeeper".utf8)
         )
         
@@ -129,8 +126,7 @@ final class ReachabilityService: ReachabilityServiceProtocol {
         
         if let replyPacket = parseICMPReply(responseData),
            replyPacket.header.type == ICMPHeader.echoReply,
-           UInt16(bigEndian: replyPacket.header.identifier) == identifier,
-           UInt16(bigEndian: replyPacket.header.sequenceNumber) == sequenceNumber {
+           UInt16(bigEndian: replyPacket.header.identifier) == identifier {
             logger.info("ICMP ping successful for \(target.host)")
             await notifyDelegate(target: target, isReachable: true)
         } else {

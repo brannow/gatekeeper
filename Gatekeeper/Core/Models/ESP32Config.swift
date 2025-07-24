@@ -7,10 +7,16 @@
 
 import Foundation
 
+enum ReachabilityStatus {
+    case unknown
+    case connected
+    case disconnected
+}
+
 class ESP32Config {
     let host: String
     let port: UInt16
-    var isReachable: Bool = false
+    var reachabilityStatus: ReachabilityStatus = .unknown
     
     init(host: String, port: UInt16) {
         self.host = host

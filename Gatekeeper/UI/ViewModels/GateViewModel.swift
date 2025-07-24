@@ -46,6 +46,10 @@ final class GateViewModel: ObservableObject {
     private let service: NetworkService
     private let config: ConfigManagerProtocol
     private let reachabilityService: ReachabilityServiceProtocol
+    private let logger: LoggerProtocol
+    private var reachabilityTimer: Timer?
+    private var recoverFromErrorTimer: Timer?
+    private var reachabilityRetry: UInt16 = 0
 
     // MARK: - Button State Machine
     private var buttonState: ButtonState {
@@ -60,19 +64,25 @@ final class GateViewModel: ObservableObject {
     }
     
     private var canTriggerGate: Bool {
-        isConfigured && currentState == .ready
+        isConfigured && (currentState == .ready || currentState == .error)
     }
 
     // MARK: - Init
-    init(service: NetworkService, config: ConfigManagerProtocol, reachabilityService: ReachabilityServiceProtocol) {
+    init(service: NetworkService, config: ConfigManagerProtocol, reachabilityService: ReachabilityServiceProtocol, logger: LoggerProtocol) {
         self.service = service
         self.config = config
         self.reachabilityService = reachabilityService
+        self.logger = logger
         service.delegate = self
         reachabilityService.delegate = self
         
         // Initial state setup
         updateStateAfterConfigChange()
+    }
+    
+    deinit {
+        reachabilityTimer?.invalidate()
+        recoverFromErrorTimer?.invalidate()
     }
 
     // MARK: - Public API
@@ -93,8 +103,8 @@ final class GateViewModel: ObservableObject {
     
     private func resetConfigReachability() {
         // Reset reachability for all configs since they may have changed
-        config.getESP32Config()?.isReachable = false
-        config.getMQTTConfig()?.isReachable = false
+        config.getESP32Config()?.reachabilityStatus = .unknown
+        config.getMQTTConfig()?.reachabilityStatus = .unknown
     }
     
     // MARK: - Private Helpers
@@ -109,18 +119,8 @@ final class GateViewModel: ObservableObject {
     }
     
     private func startNetworkCheck() {
-        guard let targets = config.getReachabilityTargets(), !targets.isEmpty else {
-            currentState = .ready
-            return
-        }
-        
-        // Reset reachability before checking (in case host changed)
-        for target in targets {
-            target.config.isReachable = false
-        }
-        
-        currentState = .checkingNetwork
-        reachabilityService.checkTargets(targets)
+        reachabilityRetry = 0
+        performTimerReachabilityCheck()
     }
     
     private func resetToReadyState() {
@@ -134,6 +134,53 @@ final class GateViewModel: ObservableObject {
         case .ready, .checkingNetwork, .noNetwork, .timeout, .error:
             return false
         }
+    }
+    
+    
+    private func startReachabilityTimer(_ noRestart: Bool = false) {
+        
+        let isRunning = reachabilityTimer?.isValid ?? false
+        if (noRestart && isRunning) {
+            return
+        }
+        
+        stopReachabilityTimer()
+        logger.info("Starting reachability timer")
+        reachabilityTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.performTimerReachabilityCheck()
+            }
+        }
+    }
+    
+    private func stopReachabilityTimer() {
+        logger.info("Stopping reachability timer")
+        reachabilityTimer?.invalidate()
+        reachabilityTimer = nil
+    }
+    
+    private func performTimerReachabilityCheck() {
+        logger.info("Performing timer reachability check (\(reachabilityRetry) / 10)")
+        guard let targets = config.getReachabilityTargets(), !targets.isEmpty else {
+            stopReachabilityTimer()
+            return
+        }
+        
+        if !config.areAllConfigsUnreachable() {
+            stopReachabilityTimer()
+            return
+        }
+        
+        if (reachabilityRetry >= 10) {
+            logger.warning("recheck trys exceeded")
+            currentState = .noNetwork
+            stopReachabilityTimer()
+            return
+        }
+        
+        reachabilityRetry+=1;
+        currentState = .checkingNetwork
+        reachabilityService.checkTargets(targets)
     }
 }
 
@@ -155,10 +202,13 @@ extension GateViewModel: NetworkServiceDelegate {
     func serviceDidFail(_ error: GateKeeperError) {
         lastError = error
         currentState = .error
-        
-        Task { @MainActor in
-            try? await Task.sleep(for: .seconds(1))
-            resetToReadyState()
+        logger.error("gate trigger failed", error: error)
+        recoverFromErrorTimer?.invalidate()
+        recoverFromErrorTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: false) { [weak self] _ in
+            Task { @MainActor in
+                self?.logger.info("reset button to ready state")
+                self?.resetToReadyState()
+            }
         }
     }
 }
@@ -166,12 +216,23 @@ extension GateViewModel: NetworkServiceDelegate {
 // MARK: - ReachabilityServiceDelegate
 extension GateViewModel: ReachabilityServiceDelegate {
     func reachabilityService(_ service: ReachabilityServiceProtocol, target: PingTarget, isReachable: Bool) {
-        print("Ping result: \(target.host) -> \(isReachable)")
+        logger.info("Ping result", metadata: ["host": target.host, "isReachable": "\(isReachable)"])
         
         // Update the config object's reachability directly through the target
-        target.config.isReachable = isReachable
-        if currentState == .checkingNetwork {
+        let newStatus: ReachabilityStatus = isReachable ? .connected : .disconnected
+        if (newStatus != target.config.reachabilityStatus) {
+            target.config.reachabilityStatus = newStatus
+            logger.info("Updated host status", metadata: ["host": target.host, "status": "\(target.config.reachabilityStatus)"])
+        }
+        
+        
+        // Check if we need to start or stop the reachability timer
+        logger.info("any connections reachable: \(!config.areAllConfigsUnreachable() ? "YES" : "NO")")
+        if !config.areAllConfigsUnreachable() {
             currentState = .ready
+            stopReachabilityTimer()
+        } else {
+            startReachabilityTimer(true)
         }
     }
 }

@@ -9,7 +9,7 @@ import Foundation
 
 protocol ReachableConfig: AnyObject {
     var host: String { get }
-    var isReachable: Bool { get set }
+    var reachabilityStatus: ReachabilityStatus { get set }
 }
 
 extension ESP32Config: ReachableConfig {}
@@ -21,4 +21,5 @@ protocol ConfigManagerProtocol {
     func getMQTTConfig() -> MQTTConfig?
     func getESP32Config() -> ESP32Config?
     func getReachabilityTargets() -> [PingTarget]?
+    func areAllConfigsUnreachable() -> Bool
 }

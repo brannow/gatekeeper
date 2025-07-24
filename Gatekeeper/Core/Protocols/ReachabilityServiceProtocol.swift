@@ -17,5 +17,4 @@ protocol ReachabilityServiceProtocol: AnyObject {
 @MainActor
 protocol ReachabilityServiceDelegate: AnyObject {
     func reachabilityService(_ service: ReachabilityServiceProtocol, target: PingTarget, isReachable: Bool)
-    func reachabilityService(_ service: ReachabilityServiceProtocol, anyTargetReachable: Bool, from targets: [PingTarget])
 }

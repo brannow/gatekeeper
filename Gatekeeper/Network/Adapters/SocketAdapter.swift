@@ -22,10 +22,6 @@ final class SocketAdapter: GateNetworkInterface {
         self.port = cfg.port
         self.logger = logger
     }
-    
-    func requireWifi() -> Bool {
-        return true
-    }
 
     func start() {
         logger.info("try connect to udp socket", metadata: ["host": host, "port": String(port)])

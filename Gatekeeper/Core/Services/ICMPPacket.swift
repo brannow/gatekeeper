@@ -32,7 +32,9 @@ extension ICMPHeader {
         self.checksum = 0
         
         var packetData = Data()
-        packetData.append(Data(bytes: &self, count: ICMPHeader.headerSize))
+        withUnsafeBytes(of: self) { bytes in
+            packetData.append(contentsOf: bytes)
+        }
         
         if let data = data {
             packetData.append(data)
@@ -43,26 +45,49 @@ extension ICMPHeader {
 }
 
 struct ICMPChecksum {
+    /// Calculate Internet checksum (RFC 1071) for ICMP packets
+    /// Uses proper network byte order handling and overflow-safe arithmetic
     static func calculate(data: Data) -> UInt16 {
+        guard !data.isEmpty else { return 0xFFFF }
+        
         var sum: UInt32 = 0
-        let bytes = data.withUnsafeBytes { $0.bindMemory(to: UInt8.self) }
+        let count = data.count
         
-        var i = 0
-        while i < bytes.count - 1 {
-            let word = UInt16(bytes[i]) << 8 + UInt16(bytes[i + 1])
-            sum += UInt32(word)
-            i += 2
+        // Process data as 16-bit words in network byte order
+        data.withUnsafeBytes { bytes in
+            let uint8Pointer = bytes.bindMemory(to: UInt8.self)
+            
+            var i = 0
+            // Process pairs of bytes as 16-bit words
+            while i < count - 1 {
+                // Combine two bytes in network byte order (big-endian)
+                let word = (UInt16(uint8Pointer[i]) << 8) | UInt16(uint8Pointer[i + 1])
+                sum = sum &+ UInt32(word) // Use overflow-safe addition
+                i += 2
+            }
+            
+            // Handle odd byte if present
+            if i < count {
+                // Pad with zero and treat as network byte order
+                let word = UInt16(uint8Pointer[i]) << 8
+                sum = sum &+ UInt32(word)
+            }
         }
         
-        if i < bytes.count {
-            sum += UInt32(bytes[i]) << 8
-        }
-        
+        // Add carry bits until no more carries (RFC 1071)
         while (sum >> 16) != 0 {
-            sum = (sum & 0xFFFF) + (sum >> 16)
+            sum = (sum & 0xFFFF) &+ (sum >> 16)
         }
         
-        return UInt16(~sum)
+        // At this point, sum should be 16 bits max
+        // Convert to UInt16 first, then complement
+        let sum16 = UInt16(sum & 0xFFFF)
+        return ~sum16
+    }
+    
+    /// Verify checksum is correct (should return 0 when calculated over data including checksum)
+    static func verify(data: Data) -> Bool {
+        return calculate(data: data) == 0
     }
 }
 
@@ -70,6 +95,7 @@ struct ICMPPacket {
     let header: ICMPHeader
     let data: Data
     
+    /// Create new ICMP packet for sending (calculates checksum)
     init(type: UInt8, code: UInt8, identifier: UInt16, sequenceNumber: UInt16, data: Data = Data()) {
         var header = ICMPHeader(type: type, code: code, identifier: identifier, sequenceNumber: sequenceNumber)
         header.calculateChecksum(data: data)
@@ -78,10 +104,17 @@ struct ICMPPacket {
         self.data = data
     }
     
+    /// Create ICMP packet from parsed data (preserves header as-is)
+    private init(header: ICMPHeader, data: Data) {
+        self.header = header
+        self.data = data
+    }
+    
     func toData() -> Data {
         var packetData = Data()
-        var headerCopy = header
-        packetData.append(Data(bytes: &headerCopy, count: ICMPHeader.headerSize))
+        withUnsafeBytes(of: header) { bytes in
+            packetData.append(contentsOf: bytes)
+        }
         packetData.append(data)
         return packetData
     }
@@ -89,18 +122,17 @@ struct ICMPPacket {
     static func fromData(_ data: Data) -> ICMPPacket? {
         guard data.count >= ICMPHeader.headerSize else { return nil }
         
-        let header = data.withUnsafeBytes { bytes in
-            bytes.bindMemory(to: ICMPHeader.self).first!
+        // Safe aligned load of header
+        let header = data.withUnsafeBytes { ptr -> ICMPHeader in
+            ptr.load(as: ICMPHeader.self)
         }
         
-        let payloadData = data.subdata(in: ICMPHeader.headerSize..<data.count)
+        let payloadData = data.dropFirst(ICMPHeader.headerSize)
         
+        // This is a parser - keep header exactly as received, don't recalculate checksum
         return ICMPPacket(
-            type: header.type,
-            code: header.code,
-            identifier: UInt16(bigEndian: header.identifier),
-            sequenceNumber: UInt16(bigEndian: header.sequenceNumber),
-            data: payloadData
+            header: header,
+            data: Data(payloadData)
         )
     }
 }

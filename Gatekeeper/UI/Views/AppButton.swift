@@ -75,7 +75,9 @@ struct AppButton: View {
     // MARK: - Helpers
     private var buttonColor: Color {
         switch vm.currentState {
-        case .ready:   return vm.isConfigured ? .green : .gray
+        case .ready: return vm.isConfigured ? .green : .gray
+        case .checkingNetwork: return .orange
+        case .noNetwork: return .red
         case .triggering, .waitingForRelayClose: return .orange
         case .timeout, .error: return .red
         }
@@ -84,8 +86,11 @@ struct AppButton: View {
     private var statusMessage: String {
         switch vm.currentState {
         case .ready:
-            return vm.isConfigured ? "Ready to open gate"
-                                   : "Please configure settings first"
+            return vm.isConfigured ? "Ready to open gate" : "Please configure settings first"
+        case .checkingNetwork:
+            return "Checking network connectivity…"
+        case .noNetwork:
+            return "No configured hosts are reachable"
         case .triggering:
             return "Sending trigger signal…"
         case .waitingForRelayClose:

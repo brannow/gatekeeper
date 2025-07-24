@@ -21,10 +21,6 @@ final class MQTTNetworkAdapter: NSObject, GateNetworkInterface {
         super.init()
         buildClient()
     }
-    
-    func requireWifi() -> Bool {
-        return false
-    }
 
     private func buildClient() {
         mqtt = CocoaMQTT(clientID: "gate-\(UUID().uuidString.prefix(8))",

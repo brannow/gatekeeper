@@ -15,10 +15,17 @@ final class ReachabilityService: ReachabilityServiceProtocol {
     private var sequenceNumber: UInt16 = 0
     private let identifier: UInt16
     private let timeout: TimeInterval = 3.0
+    private let pathMonitor = NWPathMonitor()
+    private let monitorQueue = DispatchQueue(label: "reachability.monitor")
     
     init(logger: LoggerProtocol) {
         self.logger = logger
         self.identifier = UInt16.random(in: 1...UInt16.max)
+        
+        pathMonitor.pathUpdateHandler = { [weak self] path in
+            self?.logger.info("Network path status: \(path.status)")
+        }
+        pathMonitor.start(queue: monitorQueue)
     }
     
     func checkTarget(_ target: PingTarget) {
@@ -26,8 +33,10 @@ final class ReachabilityService: ReachabilityServiceProtocol {
     }
     
     func checkTargets(_ targets: [PingTarget]) {
-        Task {
-            await performPingChecks(targets)
+        for target in targets {
+            Task { [weak self] in
+                await self?.startAsyncPing(target)
+            }
         }
     }
     
@@ -35,48 +44,24 @@ final class ReachabilityService: ReachabilityServiceProtocol {
         // Task cancellation is handled automatically when the async context is cancelled
     }
     
-    private func performPingChecks(_ targets: [PingTarget]) async {
-        let results = await withTaskGroup(of: (PingTarget, Bool).self, returning: [(PingTarget, Bool)].self) { group in
-            for target in targets {
-                group.addTask { [weak self] in
-                    let isReachable = await self?.pingTarget(target) ?? false
-                    return (target, isReachable)
-                }
-            }
-            
-            var allResults: [(PingTarget, Bool)] = []
-            for await (target, isReachable) in group {
-                allResults.append((target, isReachable))
-                
-                await MainActor.run { [weak self] in
-                    guard let self = self else { return }
-                    self.delegate?.reachabilityService(self, target: target, isReachable: isReachable)
-                }
-            }
-            return allResults
-        }
+    private func startAsyncPing(_ target: PingTarget) async {
+        logger.info("Starting ping to \(target.host)")
         
-        await MainActor.run { [weak self] in
-            guard let self = self else { return }
-            let anyReachable = results.contains { $0.1 }
-            self.delegate?.reachabilityService(self, anyTargetReachable: anyReachable, from: targets)
-        }
-    }
-    
-    private func pingTarget(_ target: PingTarget) async -> Bool {
         guard let ipAddress = await resolveHostname(target.host) else {
             logger.warning("Failed to resolve hostname: \(target.host)")
-            return false
+            await notifyDelegate(target: target, isReachable: false)
+            return
         }
         
-        return await performICMPPing(to: ipAddress, host: target.host)
+        await performAsyncICMPPing(to: ipAddress, target: target)
     }
     
-    private func performICMPPing(to ipAddress: String, host: String) async -> Bool {
+    private func performAsyncICMPPing(to ipAddress: String, target: PingTarget) async {
         let socketFD = socket(AF_INET, SOCK_DGRAM, IPPROTO_ICMP)
         guard socketFD != -1 else {
             logger.error("Failed to create ICMP socket", error: nil)
-            return false
+            await notifyDelegate(target: target, isReachable: false)
+            return
         }
         
         defer {
@@ -96,7 +81,7 @@ final class ReachabilityService: ReachabilityServiceProtocol {
             code: 0,
             identifier: identifier,
             sequenceNumber: sequenceNumber,
-            data: Data("GatekeeperPing".utf8)
+            data: Data("Gatekeeper".utf8)
         )
         
         let packetData = packet.toData()
@@ -114,8 +99,9 @@ final class ReachabilityService: ReachabilityServiceProtocol {
         }
         
         guard sent == packetData.count else {
-            logger.warning("Failed to send ICMP packet to \(host)")
-            return false
+            logger.warning("Failed to send ICMP packet to \(target.host)")
+            await notifyDelegate(target: target, isReachable: false)
+            return
         }
         
         var buffer = [UInt8](repeating: 0, count: 1024)
@@ -134,22 +120,23 @@ final class ReachabilityService: ReachabilityServiceProtocol {
         }
         
         guard received > 0 else {
-            logger.info("ICMP timeout for \(host)")
-            return false
+            logger.info("ICMP timeout for \(target.host)")
+            await notifyDelegate(target: target, isReachable: false)
+            return
         }
         
         let responseData = Data(buffer.prefix(received))
         
-        if let replyPacket = parseICMPReply(responseData), 
+        if let replyPacket = parseICMPReply(responseData),
            replyPacket.header.type == ICMPHeader.echoReply,
            UInt16(bigEndian: replyPacket.header.identifier) == identifier,
            UInt16(bigEndian: replyPacket.header.sequenceNumber) == sequenceNumber {
-            logger.info("ICMP ping successful for \(host)")
-            return true
+            logger.info("ICMP ping successful for \(target.host)")
+            await notifyDelegate(target: target, isReachable: true)
+        } else {
+            logger.info("Invalid ICMP reply from \(target.host)")
+            await notifyDelegate(target: target, isReachable: false)
         }
-        
-        logger.info("Invalid ICMP reply from \(host)")
-        return false
     }
     
     private func parseICMPReply(_ data: Data) -> ICMPPacket? {
@@ -192,6 +179,13 @@ final class ReachabilityService: ReachabilityServiceProtocol {
             
             let ipString = String(cString: buffer)
             continuation.resume(returning: ipString)
+        }
+    }
+    
+    private func notifyDelegate(target: PingTarget, isReachable: Bool) async {
+        await MainActor.run { [weak self] in
+            guard let self = self else { return }
+            self.delegate?.reachabilityService(self, target: target, isReachable: isReachable)
         }
     }
 }

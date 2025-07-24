@@ -14,11 +14,6 @@ final class NetworkService {
     private let config : ConfigManagerProtocol
     public let logger : LoggerProtocol
     
-    // MARK: - Wifi Check
-    private let monitor = NWPathMonitor()
-    private let monitorQueue = DispatchQueue(label: "wifi.monitor")
-    private var wifiAvailable = false
-
     // MARK: - Adapter chain
     public var currentIndex = 0
     public var currentAdapter: GateNetworkInterface?
@@ -41,18 +36,6 @@ final class NetworkService {
     init(config: ConfigManagerProtocol, logger: LoggerProtocol) {
         self.config = config
         self.logger = logger
-        self.monitorWifiStatus()
-    }
-    
-    private func monitorWifiStatus() {
-        monitor.pathUpdateHandler = { [weak self] path in
-                let reachable = path.usesInterfaceType(.wifi) || path.usesInterfaceType(.wiredEthernet)
-                Task { @MainActor in
-                    self?.wifiAvailable = reachable
-                    self?.logger.info("Wi-Fi / Ethernet reachability changed – some adapters might not work anymore")
-                }
-            }
-            monitor.start(queue: monitorQueue)
     }
 
     // MARK: - Entry point
@@ -82,13 +65,6 @@ final class NetworkService {
 
         // 3. Skip factories that return nil (missing config)
         guard let adapter = adapterFactories[currentIndex]() else {
-            currentIndex += 1
-            tryNext()
-            return
-        }
-        
-        if adapter.requireWifi() && !wifiAvailable {
-            cleanupAfterAdapter(adapter)
             currentIndex += 1
             tryNext()
             return

@@ -19,5 +19,4 @@ protocol GateNetworkInterface: AnyObject {
     var delegate: NetworkAdapterDelegate? { get set }
     func start()
     func stop()
-    func requireWifi() -> Bool
 }

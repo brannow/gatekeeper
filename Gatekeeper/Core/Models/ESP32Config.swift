@@ -7,7 +7,13 @@
 
 import Foundation
 
-struct ESP32Config {
+class ESP32Config {
     let host: String
     let port: UInt16
+    var isReachable: Bool = false
+    
+    init(host: String, port: UInt16) {
+        self.host = host
+        self.port = port
+    }
 }

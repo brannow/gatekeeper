@@ -17,6 +17,7 @@ final class ConfigManager: ConfigManagerProtocol {
         static let esp32Port = "esp32_port"
         static let mqttHost = "mqtt_host"
         static let mqttPort = "mqtt_port"
+        static let reachabilityTargets = "reachability_targets"
     }
     
     private enum KeychainKeys {
@@ -70,6 +71,39 @@ final class ConfigManager: ConfigManagerProtocol {
         
         let port = userDefaults.object(forKey: Keys.esp32Port) as? UInt16 ?? 8080
         return ESP32Config(host: host, port: port)
+    }
+    
+    func saveReachabilityTargets(_ targets: [PingTarget]) {
+        do {
+            let data = try JSONEncoder().encode(targets)
+            userDefaults.set(data, forKey: Keys.reachabilityTargets)
+            logger.info("Reachability targets saved", metadata: ["count": String(targets.count)])
+        } catch {
+            logger.error("Failed to save reachability targets", error: error)
+        }
+    }
+    
+    func getReachabilityTargets() -> [PingTarget]? {
+        guard let data = userDefaults.data(forKey: Keys.reachabilityTargets) else {
+            return createDefaultReachabilityTargets()
+        }
+        
+        do {
+            let targets = try JSONDecoder().decode([PingTarget].self, from: data)
+            return targets.isEmpty ? createDefaultReachabilityTargets() : targets
+        } catch {
+            logger.warning("Failed to decode reachability targets, using defaults", error: error)
+            return createDefaultReachabilityTargets()
+        }
+    }
+    
+    private func createDefaultReachabilityTargets() -> [PingTarget] {
+        let defaults = [
+            PingTarget(host: "8.8.8.8", method: .udp),
+            PingTarget(host: "1.1.1.1", method: .udp)
+        ]
+        saveReachabilityTargets(defaults)
+        return defaults
     }
     
     private func saveToKeychain(key: String, value: String) {

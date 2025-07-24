@@ -7,4 +7,4 @@
 
 import Foundation
 
-enum NetworkMethod { case udp, mqtt }
+enum NetworkMethod: Codable { case udp, mqtt }

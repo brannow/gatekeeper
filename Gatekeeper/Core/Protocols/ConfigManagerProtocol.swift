@@ -12,4 +12,6 @@ protocol ConfigManagerProtocol {
     func saveESP32Config(_ config: ESP32Config)
     func getMQTTConfig() -> MQTTConfig?
     func getESP32Config() -> ESP32Config?
+    func saveReachabilityTargets(_ targets: [PingTarget])
+    func getReachabilityTargets() -> [PingTarget]?
 }

@@ -11,9 +11,11 @@ import Foundation
 final class GateViewModel: ObservableObject {
     @Published var currentState: GateState = .ready
     @Published var lastError: GateKeeperError?
+    @Published var isNetworkReachable: Bool = false
 
     private let service: NetworkService
     private let config: ConfigManagerProtocol   // ← injected once, not stored publicly
+    private let reachabilityService: ReachabilityServiceProtocol
 
     // MARK: - Public helpers used by the UI
     var buttonTitle: String {
@@ -28,7 +30,7 @@ final class GateViewModel: ObservableObject {
 
     var isButtonDisabled: Bool {
         switch currentState {
-        case .ready: return !isConfigured
+        case .ready: return !isConfigured || !isNetworkReachable
         case .triggering, .waitingForRelayClose: return true
         case .timeout, .error: return false
         }
@@ -39,10 +41,12 @@ final class GateViewModel: ObservableObject {
     }
 
     // MARK: - Init
-    init(service: NetworkService, config: ConfigManagerProtocol) {
+    init(service: NetworkService, config: ConfigManagerProtocol, reachabilityService: ReachabilityServiceProtocol) {
         self.service = service
         self.config  = config
+        self.reachabilityService = reachabilityService
         service.delegate = self
+        reachabilityService.delegate = self
     }
 
     // MARK: - Public API
@@ -52,8 +56,17 @@ final class GateViewModel: ObservableObject {
         service.triggerGate()
     }
 
+    func checkConnectivity() {
+        guard let targets = config.getReachabilityTargets(), !targets.isEmpty else {
+            isNetworkReachable = true
+            return
+        }
+        reachabilityService.checkTargets(targets)
+    }
+
     func refreshConfiguration() {
         objectWillChange.send()   // force SwiftUI re-check of `isConfigured`
+        checkConnectivity()       // re-check connectivity when config changes
     }
 }
 
@@ -77,5 +90,17 @@ extension GateViewModel: NetworkServiceDelegate {
             try? await Task.sleep(for: .seconds(2))
             currentState = .ready
         }
+    }
+}
+
+// MARK: - ReachabilityServiceDelegate
+extension GateViewModel: ReachabilityServiceDelegate {
+    func reachabilityService(_ service: ReachabilityServiceProtocol, target: PingTarget, isReachable: Bool) {
+        // Log individual ping results for debugging
+        print("Ping \(target.host): \(isReachable)")
+    }
+    
+    func reachabilityService(_ service: ReachabilityServiceProtocol, anyTargetReachable: Bool, from targets: [PingTarget]) {
+        self.isNetworkReachable = anyTargetReachable
     }
 }

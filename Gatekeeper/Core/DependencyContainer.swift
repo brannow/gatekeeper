@@ -13,12 +13,14 @@ final class DependencyContainer {
     private let logger: LoggerProtocol
     private let configManager: ConfigManagerProtocol
     private let networkService: NetworkService      // concrete type, no protocol
+    private let reachabilityService: ReachabilityServiceProtocol
 
     @MainActor
     lazy var gateViewModel: GateViewModel = {
         GateViewModel(
             service: networkService,
-            config: configManager
+            config: configManager,
+            reachabilityService: reachabilityService
         )      // matches new init
     }()
 
@@ -32,5 +34,6 @@ final class DependencyContainer {
         logger       = Logger()
         configManager = ConfigManager(logger: logger)
         networkService = NetworkService(config: configManager, logger: logger)
+        reachabilityService = ReachabilityService(logger: logger)
     }
 }

@@ -11,81 +11,89 @@ import Network
 final class SocketAdapter: GateNetworkInterface {
     let method: NetworkMethod = .udp
     weak var delegate: NetworkAdapterDelegate?
-    private let host: String
-    private let port: UInt16
+
+    private let cfg: ESP32Config
     private let logger: LoggerProtocol
     private var conn: NWConnection?
-    private let socketQueue = DispatchQueue(label: "socket.udp")
 
     init(cfg: ESP32Config, logger: LoggerProtocol) {
-        self.host = cfg.host
-        self.port = cfg.port
+        self.cfg    = cfg
         self.logger = logger
     }
 
+    // MARK: - API
     func start() {
-        logger.info("try connect to udp socket", metadata: ["host": host, "port": String(port)])
-        conn = NWConnection(host: .init(host), port: .init(integerLiteral: port), using: .udp)
+        logger.info("UDP start", metadata: ["host": cfg.host, "port": "\(cfg.port)"])
+        conn = NWConnection(host: .init(cfg.host),
+                            port: .init(integerLiteral: cfg.port),
+                            using: .udp)
+
         conn?.stateUpdateHandler = { [weak self] state in
-            guard let self else { return }
-            switch state {
-            case .ready:
-                self.delegate?.adapterDidConnect(self)
-                self.sendTrigger()
-            case .failed:
+            guard let self = self else { return }
+            self.logger.info("state → \(state)")
+            if state == .ready {
+                self.logger.info("socket ready")
+                self.handshake()
+            }
+            if case .failed(let e) = state {
+                self.logger.error("socket failed", error: nil, metadata: ["error": "\(e)"])
                 self.delegate?.adapterDidFail(self, .udpConnectionFailed)
-            default:
-                break
             }
         }
-        
-        conn?.start(queue: socketQueue)
+
+        conn?.start(queue: .global())
     }
 
     func stop() {
+        logger.info("UDP stop")
         conn?.cancel()
         conn = nil
     }
 
-    private func sendTrigger() {
-        conn?.send(content: Data([0x01]), completion: .contentProcessed { [weak self] error in
-            guard let self else { return }
-            if error != nil {
+    // MARK: - private
+    private func handshake() {
+        logger.info("sending trigger 0x01")
+        conn?.send(content: Data([0x01]),
+                   completion: .contentProcessed { [weak self] error in
+            guard let self = self else { return }
+            if let e = error {
+                self.logger.error("send failed", error: error, metadata: ["error": "\(e)"])
                 self.delegate?.adapterDidFail(self, .udpConnectionFailed)
                 return
             }
-            self.receive()
+            self.logger.info("trigger sent, waiting 0x01")
+            self.expect(0x01) { [weak self] in
+                guard let self = self else { return }
+                self.logger.info("received 0x01 → activated")
+                self.delegate?.adapterDidReceive(self, .activated)
+
+                self.logger.info("waiting 0x00")
+                self.expect(0x00) { [weak self] in
+                    guard let self = self else { return }
+                    self.logger.info("received 0x00 → released")
+                    self.delegate?.adapterDidReceive(self, .released)
+                    self.delegate?.adapterDidComplete(self)
+                }
+            }
         })
     }
 
-    private func receive() {
-        conn?.receive(
-            minimumIncompleteLength: 1,
-            maximumLength: 1,
-            completion: { [weak self] (data: Data?, _, isComplete: Bool, error: NWError?) in
-                guard let self else { return }
-
-                if error != nil {
-                    self.delegate?.adapterDidFail(self, .invalidResponse)
-                    return
-                }
-
-                guard let byte = data?.first else {
-                    if !isComplete { self.receive() }
-                    return
-                }
-                
-                switch byte {
-                case 0x01:
-                    self.delegate?.adapterDidReceive(self, .activated)
-                    self.receive()
-                case 0x00:
-                    self.delegate?.adapterDidReceive(self, .released)
-                    self.delegate?.adapterDidComplete(self)
-                default:
-                    self.delegate?.adapterDidFail(self, .invalidResponse)
-                }
+    private func expect(_ byte: UInt8, then: @escaping () -> Void) {
+        conn?.receiveMessage { [weak self] data, _, _, error in
+            guard let self = self else { return }
+            if let e = error {
+                self.logger.error("receive error", error: e, metadata: ["error": "\(e)"])
+                self.delegate?.adapterDidFail(self, .invalidResponse)
+                return
             }
-        )
+            let got = data?.first ?? 0xFF
+            self.logger.info("expecting 0x\(String(byte, radix: 16)) got 0x\(String(got, radix: 16))")
+            if got == byte {
+                then()
+            } else {
+                self.logger.error("unexpected byte")
+                self.delegate?.adapterDidFail(self, .invalidResponse)
+            }
+        }
     }
 }

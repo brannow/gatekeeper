@@ -16,7 +16,6 @@ with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
     while True:
         data, addr = sock.recvfrom(1024)
         print(f"[{time.strftime('%H:%M:%S')}] 📥 Trigger from {addr}: {data.hex()}")
-
         # 1) activated
         sock.sendto(b"\x01", addr)
         print(f"[{time.strftime('%H:%M:%S')}] 📤 Sent 0x01 (activated) → {addr}")

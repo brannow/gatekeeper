@@ -33,7 +33,7 @@ struct AppButton: View {
     // MARK: - Subviews
     private var triggerButton: some View {
         ZStack {
-            // Shockwave
+            // Shockwave – always visible, always animates on tap
             Circle()
                 .stroke(buttonColor, lineWidth: 5)
                 .frame(width: 200, height: 200)
@@ -43,7 +43,7 @@ struct AppButton: View {
             // Main button
             Button {
                 triggerEffect()
-                Task { @MainActor in          // ← hop onto main actor explicitly
+                Task { @MainActor in
                     vm.triggerGate()
                 }
             } label: {
@@ -53,9 +53,8 @@ struct AppButton: View {
                     .frame(width: 200, height: 200)
                     .background(buttonColor)
                     .clipShape(Circle())
-                    .scaleEffect(pulseScale * (vm.isButtonDisabled ? 0.95 : 1.0))
+                    .scaleEffect(pulseScale)
             }
-            .disabled(vm.isButtonDisabled)
         }
     }
 

@@ -70,6 +70,8 @@ final class GateViewModel: ObservableObject {
     
     private var timer: Timer?          // single timer for everything
     private var reachabilityRetry: UInt16 = 0
+    private let retryDelay: TimeInterval = 2
+    private let retryMaxCount: UInt16 = 5
     
     // MARK: 3. Dependencies
     private let service: NetworkService
@@ -133,8 +135,7 @@ final class GateViewModel: ObservableObject {
     
     func refreshConfiguration() {
         objectWillChange.send()
-        resetConfigReachability()
-        transition(to: .ready)   // kick the machine
+        transition(to: .ready)
         advance()
     }
     
@@ -173,7 +174,7 @@ final class GateViewModel: ObservableObject {
             
         case .error, .timeout:
             internalState = .recoveringFromError
-            timer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: false) { [weak self] _ in
+            timer = Timer.scheduledTimer(withTimeInterval: retryDelay, repeats: false) { [weak self] _ in
                 Task { @MainActor in
                     self?.transition(to: .ready)
                     self?.advance()
@@ -207,7 +208,7 @@ final class GateViewModel: ObservableObject {
             return
         }
         
-        if retry >= 10 {
+        if retry >= retryMaxCount {
             transition(to: .noNetwork)
             internalState = .idle
             return
@@ -215,7 +216,7 @@ final class GateViewModel: ObservableObject {
         
         reachabilityService.checkTargets(targets)
         
-        timer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: false) { [weak self] _ in
+        timer = Timer.scheduledTimer(withTimeInterval: retryDelay, repeats: false) { [weak self] _ in
             Task { @MainActor in
                 guard let self = self,
                       case .pinging(let r) = self.internalState else { return }

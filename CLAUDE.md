@@ -24,21 +24,17 @@ Gatekeeper/
 │   │   ├── NetworkMethod.swift      # Communication protocol enum
 │   │   ├── PingTarget.swift         # Reachability test target
 │   │   ├── GateKeeperError.swift    # Error definitions
-│   │   ├── ReachabilityStatus.swift # Network status enum
-│   │   └── ButtonState.swift        # UI button state model
 │   ├── Protocols/
 │   │   ├── ConfigManagerProtocol.swift      # Configuration interface
 │   │   ├── LoggerProtocol.swift             # Logging interface
 │   │   ├── ReachabilityServiceProtocol.swift # Ping service interface
-│   │   ├── ReachableConfig.swift            # Reachable config protocol
 │   │   ├── GateNetworkInterface.swift       # Network adapter interface
-│   │   ├── NetworkAdapterDelegate.swift     # Adapter delegate
-│   │   ├── NetworkServiceDelegate.swift     # Service delegate
-│   │   └── ReachabilityServiceDelegate.swift # Ping delegate
+│   │   └── NetworkServiceDelegate.swift     # Service delegate
 │   └── Services/
 │       ├── ConfigManager.swift              # Configuration persistence
 │       ├── Logger.swift                     # Logging service
-│       └── ReachabilityService.swift        # ICMP ping service
+│       ├── ReachabilityService.swift        # ICMP ping service
+│       └── ICMPPacket.swift                 # Low-level ICMP handling
 ├── UI/
 │   ├── Views/
 │   │   ├── AppButton.swift          # Main trigger button view
@@ -48,10 +44,9 @@ Gatekeeper/
 │       └── ConfigViewModel.swift    # Configuration view model
 ├── Network/
 │   ├── NetworkService.swift         # Main network service
-│   ├── Adapters/
-│   │   ├── SocketAdapter.swift      # UDP communication adapter
-│   │   └── MQTTNetworkAdapter.swift # MQTT communication adapter
-│   └── ICMPPacket.swift            # Low-level ICMP handling
+│   └── Adapters/
+│       ├── SocketAdapter.swift      # UDP communication adapter
+│       └── MQTTNetworkAdapter.swift # MQTT communication adapter
 └── Assets.xcassets/                # App resources
 ```
 
@@ -63,8 +58,6 @@ Gatekeeper/
 - **GateState**: App states (ready, checkingNetwork, triggering, etc.)
 - **RelayState**: Relay control states (activated, released)
 - **NetworkMethod**: Communication protocols (udp, mqtt)
-- **ReachabilityStatus**: Network connectivity states
-- **ButtonState**: UI button state management
 - **PingTarget**: Combines config and method for ping tests
 - **GateKeeperError**: Comprehensive error definitions
 
@@ -72,12 +65,12 @@ Gatekeeper/
 - **ConfigManager**: Handles UserDefaults + Keychain storage
 - **Logger**: os.log wrapper with metadata support
 - **ReachabilityService**: ICMP ping implementation
+- **ICMPPacket**: Low-level ICMP packet handling
 
 ### Network Layer (`Network/`)
 - **NetworkService**: Main service with adapter chain pattern
 - **SocketAdapter**: UDP communication for ESP32
 - **MQTTNetworkAdapter**: MQTT using CocoaMQTT library
-- **ICMPPacket**: Raw socket ICMP implementation
 
 ### UI Layer (`UI/`)
 - **AppButton**: Main circular trigger button with status

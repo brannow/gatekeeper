@@ -8,10 +8,10 @@
 import Foundation
 
 class MQTTConfig {
-    let host: String
-    let port: UInt16
-    let username: String
-    let password: String
+    var host: String
+    var port: UInt16
+    var username: String
+    var password: String
     var reachabilityStatus: ReachabilityStatus = .unknown
     
     init(host: String, port: UInt16, username: String, password: String) {

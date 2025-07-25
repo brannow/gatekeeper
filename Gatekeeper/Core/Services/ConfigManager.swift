@@ -40,9 +40,21 @@ final class ConfigManager: ConfigManagerProtocol {
     }
     
     func saveMQTTConfig(_ config: MQTTConfig) {
+        let oldHost = userDefaults.string(forKey: Keys.mqttHost)
         userDefaults.set(config.host, forKey: Keys.mqttHost)
         userDefaults.set(config.port, forKey: Keys.mqttPort)
-        mqttConfig = nil
+        
+        if let cachedConfig = mqttConfig {
+            cachedConfig.host = config.host
+            cachedConfig.port = config.port
+            cachedConfig.username = config.username
+            cachedConfig.password = config.password
+            
+            if oldHost != config.host {
+                logger.info("resetting reachability status after host change")
+                cachedConfig.reachabilityStatus = .unknown
+            }
+        }
         
         do {
             try saveToKeychain(key: KeychainKeys.mqttUsername, value: config.username)
@@ -59,9 +71,20 @@ final class ConfigManager: ConfigManagerProtocol {
             return
         }
         
+        let oldHost = userDefaults.string(forKey: Keys.esp32IP)
         userDefaults.set(config.host, forKey: Keys.esp32IP)
         userDefaults.set(config.port, forKey: Keys.esp32Port)
-        esp32Config = nil
+        
+        if let cachedConfig = esp32Config {
+            cachedConfig.host = config.host
+            cachedConfig.port = config.port
+            
+            if oldHost != config.host {
+                logger.info("resetting reachability status after host change")
+                cachedConfig.reachabilityStatus = .unknown
+            }
+        }
+        
         logger.info("ESP32 configuration saved", metadata: ["host": config.host, "port": String(config.port)])
     }
     
@@ -79,7 +102,8 @@ final class ConfigManager: ConfigManagerProtocol {
         
         let port: UInt16 = userDefaults.object(forKey: Keys.mqttPort) as? UInt16 ?? 8883
         
-        return MQTTConfig(host: host, port: port, username: username, password: password)
+        mqttConfig = MQTTConfig(host: host, port: port, username: username, password: password)
+        return mqttConfig!
     }
     
     func getESP32Config() -> ESP32Config? {
@@ -93,7 +117,8 @@ final class ConfigManager: ConfigManagerProtocol {
         }
         
         let port = userDefaults.object(forKey: Keys.esp32Port) as? UInt16 ?? 8080
-        return ESP32Config(host: host, port: port)
+        esp32Config = ESP32Config(host: host, port: port)
+        return esp32Config!
     }
     
     func getReachabilityTargets() -> [PingTarget]? {

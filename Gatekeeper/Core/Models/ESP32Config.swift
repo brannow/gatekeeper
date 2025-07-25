@@ -14,8 +14,8 @@ enum ReachabilityStatus {
 }
 
 class ESP32Config {
-    let host: String
-    let port: UInt16
+    var host: String
+    var port: UInt16
     var reachabilityStatus: ReachabilityStatus = .unknown
     
     init(host: String, port: UInt16) {

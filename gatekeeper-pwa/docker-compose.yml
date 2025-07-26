@@ -1,0 +1,14 @@
+services:
+  gatekeeper-pwa:
+    container_name: gatekeeper-node
+    image: node:20-alpine
+    working_dir: /app
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+    tty: true
+    stdin_open: true

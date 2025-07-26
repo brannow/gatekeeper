@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/manifest.json" />
+    
+    <!-- Standard favicon -->
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    
+    <!-- iOS Safari PWA support -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Gatekeeper" />
+    <link rel="apple-touch-icon" href="/icon-192x192.png" />
+    
+    <!-- Theme color for PWA -->
+    <meta name="theme-color" content="#4CAF50" />
+    <meta name="msapplication-TileColor" content="#4CAF50" />
+    
+    <!-- Description for PWA -->
+    <meta name="description" content="Remote gate control application with ESP32 and MQTT support" />
+    
+    <title>Gatekeeper PWA</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

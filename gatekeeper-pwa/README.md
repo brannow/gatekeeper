@@ -58,30 +58,32 @@ A React + TypeScript PWA for controlling a gate through HTTP and MQTT communicat
    - **MQTT**: Broker must accept publish to gate control topic
 
 ## Project Structure
-
 ```
 gatekeeper-pwa/
 ├── src/
 │   ├── components/
-│   │   ├── TriggerButton.tsx    # Main trigger button with state machine integration
-│   │   └── ConfigModal.tsx      # Dual-protocol config modal with tabbed interface
+│   │   ├── TriggerButton.tsx    # Presentation-only trigger button UI
+│   │   └── ConfigModal.tsx      # Dual-protocol configuration modal
 │   ├── adapters/
 │   │   ├── HttpAdapter.ts       # HTTP protocol adapter (ESP32)
 │   │   └── MqttAdapter.ts       # MQTT protocol adapter (WSS)
 │   ├── services/
-│   │   ├── NetworkService.ts    # Network service with adapter chain
 │   │   ├── ConfigManager.ts     # Enhanced config persistence with state recovery
 │   │   ├── ValidationService.ts # Centralized validation with warnings
 │   │   ├── MqttService.ts       # MQTT service for WSS connections
-│   │   └── ReachabilityService.ts # Network reachability checking
+│   │   ├── NetworkService.ts    # Core network service logic (used by hooks)
+│   │   └── ReachabilityService.ts # Core network reachability logic (used by hooks)
 │   ├── network/
 │   │   ├── NetworkConfig.ts     # Network timeouts and constants
 │   │   └── NetworkErrorHandler.ts # Centralized error handling
 │   ├── hooks/
-│   │   ├── useConfig.ts         # Enhanced config hook with state machine support
-│   │   └── useStateMachine.ts   # State machine hook for UI integration
+│   │   ├── useConfig.ts         # Manages application configuration
+│   │   ├── useStateMachine.ts   # Generic state machine hook
+│   │   ├── useReachability.ts   # Manages ReachabilityService lifecycle
+│   │   ├── useNetworkService.ts # Manages NetworkService lifecycle
+│   │   └── useGatekeeper.ts     # Main orchestration hook for the application
 │   ├── types/
-│   │   ├── index.ts            # Core TypeScript interfaces
+│   │   ├── index.ts            # Core interfaces (GateState, AppConfig, etc.)
 │   │   ├── network.ts          # Network-specific type definitions
 │   │   ├── errors.ts           # Error type definitions
 │   │   └── state-machine.ts    # Complete state machine definitions
@@ -90,14 +92,22 @@ gatekeeper-pwa/
 │   │   ├── TimeoutManager.ts   # Timeout management with exponential backoff
 │   │   └── NetworkStateManager.ts # Network state coordination
 │   ├── App.tsx                 # Main App component
-│   ├── App.css                 # Component and modal styles
-│   └── main.tsx                # React entry point
+│   ├── App.css                 # Component styles with modal and button design
+│   └── main.tsx                # React 18 entry point
 ├── index.html                  # Vite HTML template
-├── package.json               # Dependencies
-├── tsconfig.json              # TypeScript config
-├── vite.config.ts             # Vite build config
+├── package.json               # React 18 + TypeScript + Vite dependencies
+├── tsconfig.json              # TypeScript strict mode configuration
+├── vite.config.ts             # Vite build configuration
 └── README.md                  # This file
 ```
+
+## Architecture Highlights
+
+- **Hook-Based Architecture**: The primary architectural pattern. All business logic, state management, and service orchestration are handled by custom React Hooks. UI components are simple, presentational, and decoupled from the application's core logic.
+- **Clean Architecture**: Types → Services → Hooks → Components → App. This is now even more true, with a clearer separation of concerns.
+- **Adapter Chain Pattern**: Still used within the `NetworkService`, which is managed by the `useNetworkService` hook.
+- **Composition of Hooks**: The main `useGatekeeper` hook composes multiple smaller, focused hooks (`useConfig`, `useReachability`, `useNetworkService`, `useStateMachine`) to build complex functionality from simple, reusable pieces.
+- **Service Layer**: Services like `ConfigManager` and `ValidationService` remain, but are now primarily consumed by the hooks instead of directly by UI components.
 
 ## ESP32 Minimal API
 

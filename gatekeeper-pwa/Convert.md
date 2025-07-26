@@ -722,3 +722,25 @@ For UDP limitation, recommended approach:
 - `Core/Protocols/ReachabilityServiceProtocol.swift:*` - Ping service interface
 
 This plan maintains the exact same functionality and user experience as your Swift app while adapting to web platform constraints using modern, industry-standard technologies.
+
+---
+
+### **Phase 3.5: Architectural Refactoring (Post-Implementation)**
+
+**Goal**: Decouple business logic from the UI to improve maintainability, testability, and scalability.
+
+#### **3.5.1 Problem Statement**
+- The `TriggerButton` component became a "God Component," handling state management, service initialization, network logic, and all UI rendering.
+- This led to a performance issue (infinite re-render loop) and made the component difficult to understand and maintain.
+
+#### **3.5.2 Solution: Hook-Based Architecture**
+- **Extract Logic into Hooks**: All business logic and service management were extracted from `TriggerButton` into a series of custom hooks.
+- **`useGatekeeper.ts`**: The main orchestration hook that composes other hooks and manages the application's state and side effects.
+- **`useNetworkService.ts` & `useReachability.ts`**: Hooks dedicated to managing the lifecycle of their respective services.
+- **Presentation-Only Component**: `TriggerButton` was refactored into a simple, "dumb" component that only renders the UI based on props received from `useGatekeeper`.
+
+#### **3.5.3 Benefits**
+- **Separation of Concerns**: Clear boundaries between UI and logic.
+- **Improved Readability**: Smaller, more focused components and hooks.
+- **Enhanced Testability**: Hooks can be tested in isolation.
+- **Scalability**: Easier to add new features without impacting existing code.

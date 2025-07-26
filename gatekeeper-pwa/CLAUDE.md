@@ -48,23 +48,26 @@ docker exec gatekeeper-node npm install          # Install dependencies
 gatekeeper-pwa/
 ├── src/
 │   ├── components/
-│   │   ├── TriggerButton.tsx    # Main circular button with state machine integration
+│   │   ├── TriggerButton.tsx    # Presentation-only trigger button UI
 │   │   └── ConfigModal.tsx      # Dual-protocol configuration modal
 │   ├── adapters/
 │   │   ├── HttpAdapter.ts       # HTTP protocol adapter (ESP32)
 │   │   └── MqttAdapter.ts       # MQTT protocol adapter (WSS)
 │   ├── services/
-│   │   ├── NetworkService.ts    # Network service with adapter chain
 │   │   ├── ConfigManager.ts     # Enhanced config persistence with state recovery
 │   │   ├── ValidationService.ts # Centralized validation with warnings
 │   │   ├── MqttService.ts       # MQTT service for WSS connections
-│   │   └── ReachabilityService.ts # Network reachability checking
+│   │   ├── NetworkService.ts    # Core network service logic (used by hooks)
+│   │   └── ReachabilityService.ts # Core network reachability logic (used by hooks)
 │   ├── network/
 │   │   ├── NetworkConfig.ts     # Network timeouts and constants
 │   │   └── NetworkErrorHandler.ts # Centralized error handling
 │   ├── hooks/
-│   │   ├── useConfig.ts         # Enhanced config hook with state machine support
-│   │   └── useStateMachine.ts   # State machine hook for UI integration
+│   │   ├── useConfig.ts         # Manages application configuration
+│   │   ├── useStateMachine.ts   # Generic state machine hook
+│   │   ├── useReachability.ts   # Manages ReachabilityService lifecycle
+│   │   ├── useNetworkService.ts # Manages NetworkService lifecycle
+│   │   └── useGatekeeper.ts     # Main orchestration hook for the application
 │   ├── types/
 │   │   ├── index.ts            # Core interfaces (GateState, AppConfig, etc.)
 │   │   ├── network.ts          # Network-specific type definitions
@@ -85,72 +88,83 @@ gatekeeper-pwa/
 ```
 
 ## Architecture Patterns
-- **Clean Architecture**: Types → Services → Hooks → Components → App
-- **Adapter Chain Pattern**: NetworkService with HTTP/MQTT protocol adapters
-- **Component-Based**: React functional components with hooks
-- **State Management**: useConfig hook for configuration, useState for component state
-- **Service Layer**: ConfigManager for persistence, NetworkService for communication
-- **Centralized Validation**: ValidationService with dual validation modes
-- **Unified Error Handling**: NetworkErrorHandler for consistent error management
-- **TypeScript**: Strict mode with comprehensive interface definitions
-- **DRY Principles**: No code duplication, single source of truth for validation/errors
+- **Hook-Based Architecture**: The primary architectural pattern. All business logic, state management, and service orchestration are handled by custom React Hooks. UI components are simple, presentational, and decoupled from the application's core logic.
+- **Clean Architecture**: Types → Services → Hooks → Components → App. This is now even more true, with a clearer separation of concerns.
+- **Adapter Chain Pattern**: Still used within the `NetworkService`, which is managed by the `useNetworkService` hook.
+- **Composition of Hooks**: The main `useGatekeeper` hook composes multiple smaller, focused hooks (`useConfig`, `useReachability`, `useNetworkService`, `useStateMachine`) to build complex functionality from simple, reusable pieces.
+- **Service Layer**: Services like `ConfigManager` and `ValidationService` remain, but are now primarily consumed by the hooks instead of directly by UI components.
+- **TypeScript**: Strict mode with comprehensive interface definitions.
+- **DRY Principles**: No code duplication, single source of truth for validation/errors.
 
 ## Key Components
 
+### useGatekeeper Hook (`src/hooks/useGatekeeper.ts`)
+- **Orchestration**: The main application hook. Integrates configuration, services, and the state machine.
+- **State Management**: Manages the core application state, including the current state from the state machine, network errors, and relay status.
+- **Side Effects**: Contains all the core application logic, such as performing reachability checks and triggering the gate.
+- **API for UI**: Exposes a clean, simple interface (`buttonState`, `handleTrigger`, etc.) for the `TriggerButton` component to consume.
+
 ### TriggerButton (`src/components/TriggerButton.tsx`)
-- **State**: GateState ('ready' | 'triggering')
-- **Configuration**: Uses useConfig hook for ESP32 settings
-- **Action**: handleTrigger() - calls HttpService.triggerGate(config.esp32)
-- **Styling**: 200px circular button with state-based colors + config display
-- **Error Handling**: Loading/error states with user feedback
+- **Presentation Only**: A "dumb" component that is only responsible for rendering the UI.
+- **No Business Logic**: Contains no application logic, state management, or service interactions.
+- **Props-Driven**: Receives all its data and callbacks as props from the `useGatekeeper` hook.
+
+### useNetworkService Hook (`src/hooks/useNetworkService.ts`)
+- **Lifecycle Management**: Manages the lifecycle of the `NetworkService`.
+- **Initialization**: Creates and initializes the `NetworkService` with the correct adapters based on the application configuration.
+- **Cleanup**: Ensures the service is cleaned up properly when the component unmounts.
+
+### useReachability Hook (`src/hooks/useReachability.ts`)
+- **Lifecycle Management**: Manages the lifecycle of the `ReachabilityService`.
+- **Connectivity State**: Monitors and exposes the online/offline status of the application.
 
 ### ConfigModal (`src/components/ConfigModal.tsx`)
-- **Form State**: ESP32 host/port with validation
-- **Validation**: IP/hostname format, port range (1-65535)
-- **Persistence**: Auto-saves to Local Storage via useConfig
-- **UX**: Modal with backdrop close, escape key, form errors
+- **Form State**: ESP32 host/port with validation.
+- **Validation**: IP/hostname format, port range (1-65535).
+- **Persistence**: Auto-saves to Local Storage via `useConfig`.
+- **UX**: Modal with backdrop close, escape key, form errors.
 
 ### useConfig Hook (`src/hooks/useConfig.ts`)
-- **State**: AppConfig with loading/error states
-- **Methods**: updateESP32Config, updateMQTTConfig, validateAndSave, reset, import/export
-- **Persistence**: Automatic Local Storage integration via ConfigManager
-- **Validation**: Real-time validation with error reporting
+- **State**: AppConfig with loading/error states.
+- **Methods**: `updateESP32Config`, `updateMQTTConfig`, `validateAndSave`, `reset`, `import`/`export`.
+- **Persistence**: Automatic Local Storage integration via `ConfigManager`.
+- **Validation**: Real-time validation with error reporting.
 
 ### ConfigManager (`src/services/ConfigManager.ts`)
-- **Storage**: Local Storage with JSON serialization
-- **Validation**: IP/hostname regex, port range checking
-- **Migration**: Version-aware configuration migration support
-- **Export/Import**: JSON configuration backup/restore
+- **Storage**: Local Storage with JSON serialization.
+- **Validation**: IP/hostname regex, port range checking.
+- **Migration**: Version-aware configuration migration support.
+- **Export/Import**: JSON configuration backup/restore.
 
 ### NetworkService (`src/services/NetworkService.ts`)
-- **Pattern**: Adapter chain with HTTP first, MQTT fallback
-- **Timeout**: Centralized timeout management via NetworkConfig
-- **Error Handling**: Uses NetworkErrorHandler for consistent error categorization
-- **Delegation**: Callback pattern for async network operations
+- **Pattern**: Adapter chain with HTTP first, MQTT fallback.
+- **Timeout**: Centralized timeout management via `NetworkConfig`.
+- **Error Handling**: Uses `NetworkErrorHandler` for consistent error categorization.
+- **Delegation**: Callback pattern for async network operations.
 
 ### HttpAdapter (`src/adapters/HttpAdapter.ts`)
-- **Method**: triggerGate(config: ESP32Config) → Promise<boolean>
-- **Endpoint**: POST /trigger with configurable timeout
-- **Validation**: Uses ValidationService for configuration validation
-- **Error Handling**: Integrated with NetworkErrorHandler
+- **Method**: `triggerGate(config: ESP32Config) → Promise<boolean>`
+- **Endpoint**: POST `/trigger` with configurable timeout.
+- **Validation**: Uses `ValidationService` for configuration validation.
+- **Error Handling**: Integrated with `NetworkErrorHandler`.
 
 ### MqttAdapter (`src/adapters/MqttAdapter.ts`)
-- **Protocol**: MQTT over WebSocket Secure (WSS)
-- **Method**: Publish to gate control topic
-- **Timeout**: Configurable connection and operation timeouts
-- **Error Handling**: Consistent with HTTP adapter via NetworkErrorHandler
+- **Protocol**: MQTT over WebSocket Secure (WSS).
+- **Method**: Publish to gate control topic.
+- **Timeout**: Configurable connection and operation timeouts.
+- **Error Handling**: Consistent with HTTP adapter via `NetworkErrorHandler`.
 
 ### ValidationService (`src/services/ValidationService.ts`)
-- **Dual Modes**: Collect-all errors (forms) and fail-fast (services)
-- **Validation**: IP/hostname regex, port ranges, MQTT credentials
-- **Consistency**: Single source of truth for all validation logic
-- **Integration**: Used by ConfigManager, adapters, and UI components
+- **Dual Modes**: Collect-all errors (forms) and fail-fast (services).
+- **Validation**: IP/hostname regex, port ranges, MQTT credentials.
+- **Consistency**: Single source of truth for all validation logic.
+- **Integration**: Used by `ConfigManager`, adapters, and UI components.
 
 ### NetworkErrorHandler (`src/network/NetworkErrorHandler.ts`)
-- **Centralized**: All network error categorization and formatting
-- **Context**: Includes adapter, operation, timing, and configuration details
-- **User-Friendly**: Actionable error messages with recovery suggestions
-- **Logging**: Structured error logging for debugging
+- **Centralized**: All network error categorization and formatting.
+- **Context**: Includes adapter, operation, timing, and configuration details.
+- **User-Friendly**: Actionable error messages with recovery suggestions.
+- **Logging**: Structured error logging for debugging.
 
 ### Types (`src/types/index.ts`)
 - **GateState**: 'ready' | 'triggering'
@@ -185,17 +199,19 @@ gatekeeper-pwa/
 - **Phase 1** (COMPLETED): Configuration UI with Local Storage persistence
 - **Phase 2** (COMPLETED): MQTT over WSS fallback with adapter chain pattern
 - **Phase 3** (COMPLETED): Full state machine matching Swift app behavior
+- **Phase 3.5 (Refactor)** (COMPLETED): Migrated to Hook-Based Architecture
 - **Phase 4** (NEXT): PWA features (service worker, offline, installable)
 
 ## File Location Quick Reference
-- **Main Button Logic**: `src/components/TriggerButton.tsx:handleTrigger`
+- **Main Application Logic**: `src/hooks/useGatekeeper.ts`
+- **Main Button UI**: `src/components/TriggerButton.tsx`
 - **Configuration Modal**: `src/components/ConfigModal.tsx:handleSave`
-- **Config State Hook**: `src/hooks/useConfig.ts:updateESP32Config`
-- **State Machine Hook**: `src/hooks/useStateMachine.ts:transitionTo`
-- **Config Persistence**: `src/services/ConfigManager.ts:saveConfig`
-- **State Persistence**: `src/services/ConfigManager.ts:saveState`
-- **Network Orchestration**: `src/services/NetworkService.ts:triggerGate`
-- **Reachability Service**: `src/services/ReachabilityService.ts:checkReachability`
+- **Config State Hook**: `src/hooks/useConfig.ts`
+- **State Machine Hook**: `src/hooks/useStateMachine.ts`
+- **Network Service Hook**: `src/hooks/useNetworkService.ts`
+- **Reachability Hook**: `src/hooks/useReachability.ts`
+- **Network Orchestration**: `src/hooks/useGatekeeper.ts:performGateTrigger`
+- **Reachability Service**: `src/hooks/useGatekeeper.ts:performReachabilityCheck`
 - **HTTP Protocol**: `src/adapters/HttpAdapter.ts:triggerGate`
 - **MQTT Protocol**: `src/adapters/MqttAdapter.ts:triggerGate`
 - **Validation Logic**: `src/services/ValidationService.ts:validateESP32Config`

@@ -58,6 +58,27 @@
   animation: fade-warning 3s ease-in-out infinite;
 }
 
+.config-button {
+  background-color: #f0f0f0;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  padding: 10px 20px;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s ease-in-out;
+}
+
+.config-button:hover {
+  background-color: #e0e0e0;
+  border-color: #bbb;
+  transform: translateY(-1px);
+}
+
+
 .trigger-button.error {
   background: #f44336;
   cursor: pointer;

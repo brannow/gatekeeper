@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { createReachabilityService, ReachabilityService, ReachabilityServiceDelegate, ReachabilityTarget } from '../services/ReachabilityService';
 import { AppConfig } from '../types';
+import { StateMachineConfig } from '../types/state-machine';
 
-export function useReachability(config: AppConfig | null) {
+export function useReachability(config: AppConfig | null, stateMachineConfig?: StateMachineConfig) {
   const [reachabilityService, setReachabilityService] = useState<ReachabilityService | null>(null);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
@@ -19,13 +20,21 @@ export function useReachability(config: AppConfig | null) {
       }
     };
 
-    const service = createReachabilityService(config.stateMachine, delegate);
+    // Convert state machine reachability config to ReachabilityServiceConfig format
+    const reachabilityServiceConfig = stateMachineConfig?.reachability ? {
+      defaultTimeout: stateMachineConfig.reachability.timeoutPerCheck,
+      monitorConnectivity: true,
+      periodicCheckInterval: stateMachineConfig.reachability.checkInterval,
+      maxConcurrentTests: 2 // ESP32 and MQTT
+    } : undefined;
+    
+    const service = createReachabilityService(reachabilityServiceConfig, delegate);
     setReachabilityService(service);
 
     return () => {
       service.cleanup();
     };
-  }, [config]);
+  }, [config, stateMachineConfig]);
 
   return { reachabilityService, isOnline };
 }

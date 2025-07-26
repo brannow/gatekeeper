@@ -8,8 +8,8 @@ import { RelayState } from '../types';
 import { NetworkServiceDelegate } from '../types/network';
 
 export function useGatekeeper() {
-  const { config, loading: configLoading, error: configError, updateReachabilityStatus } = useConfig();
-  const { reachabilityService, isOnline } = useReachability(config);
+  const { config, stateMachineConfig, loading: configLoading, error: configError, updateReachabilityStatus } = useConfig();
+  const { reachabilityService, isOnline } = useReachability(config, stateMachineConfig);
 
   const [networkError, setNetworkError] = useState<string | null>(null);
   const [relayState, setRelayState] = useState<RelayState>('released');

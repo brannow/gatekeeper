@@ -25,7 +25,7 @@ docker exec gatekeeper-node npm install          # Install dependencies
 ** Sub Agents ** don't use Parallel Sub-Agents, there often interfere with each-other
 
 ## Current Phase Status
-**Phase 3: Full State Machine & Advanced Features (COMPLETED)**
+**Phase 4: PWA Features & Hook-Based Architecture (COMPLETED)**
 - ✅ React + TypeScript + Vite foundation
 - ✅ Network adapter chain with HTTP and MQTT support
 - ✅ Centralized error handling via NetworkErrorHandler
@@ -41,15 +41,23 @@ docker exec gatekeeper-node npm install          # Install dependencies
 - ✅ Comprehensive timeout management and network reachability
 - ✅ Enhanced hooks: useStateMachine for UI state management
 - ✅ Network state management utilities and validation warnings
-- 🎯 **Next**: Phase 4 - PWA features, service worker, and UI polish
+- ✅ **MAJOR FIX**: Hook-based architecture to prevent infinite re-render loops
+- ✅ PWA Infrastructure: InstallService and OfflineService implemented
+- ✅ **ConfigButton Enhancement**: Floating design with PWA integration
+- ✅ **Service Worker**: Complete PWA implementation with offline support
+- ✅ **Installation Flow**: Cross-platform PWA installation with platform detection
+- ✅ **PWA Optimization**: iOS safe areas, standalone mode, keyboard shortcuts
+- 🎯 **Status**: Production-ready PWA with complete feature set
 
 ## Project Structure
 ```
 gatekeeper-pwa/
 ├── src/
 │   ├── components/
-│   │   ├── TriggerButton.tsx    # Presentation-only trigger button UI
-│   │   └── ConfigModal.tsx      # Dual-protocol configuration modal
+│   │   ├── TriggerButton.tsx    # Presentation-only trigger button UI (fixed re-render loop)
+│   │   ├── ConfigModal.tsx      # Dual-protocol configuration modal
+│   │   ├── ConfigButton.tsx     # Floating config button with PWA status (Phase 4)
+│   │   └── InstallPrompt.tsx    # PWA installation modal with platform detection
 │   ├── adapters/
 │   │   ├── HttpAdapter.ts       # HTTP protocol adapter (ESP32)
 │   │   └── MqttAdapter.ts       # MQTT protocol adapter (WSS)
@@ -58,18 +66,20 @@ gatekeeper-pwa/
 │   │   ├── ValidationService.ts # Centralized validation with warnings
 │   │   ├── MqttService.ts       # MQTT service for WSS connections
 │   │   ├── NetworkService.ts    # Core network service logic (used by hooks)
-│   │   └── ReachabilityService.ts # Core network reachability logic (used by hooks)
+│   │   ├── ReachabilityService.ts # Core network reachability logic (used by hooks)
+│   │   ├── InstallService.ts    # PWA installation management with platform detection
+│   │   └── OfflineService.ts    # Offline queue and sync management with service worker
 │   ├── network/
 │   │   ├── NetworkConfig.ts     # Network timeouts and constants
 │   │   └── NetworkErrorHandler.ts # Centralized error handling
 │   ├── hooks/
-│   │   ├── useConfig.ts         # Manages application configuration
-│   │   ├── useStateMachine.ts   # Generic state machine hook
+│   │   ├── useConfig.ts         # Enhanced config hook with PWA features
+│   │   ├── useStateMachine.ts   # Generic state machine hook with timeout fixes
 │   │   ├── useReachability.ts   # Manages ReachabilityService lifecycle
 │   │   ├── useNetworkService.ts # Manages NetworkService lifecycle
-│   │   └── useGatekeeper.ts     # Main orchestration hook for the application
+│   │   └── useGatekeeper.ts     # Main orchestration hook (ARCHITECTURAL CORE)
 │   ├── types/
-│   │   ├── index.ts            # Core interfaces (GateState, AppConfig, etc.)
+│   │   ├── index.ts            # Core interfaces with PWA types
 │   │   ├── network.ts          # Network-specific type definitions
 │   │   ├── errors.ts           # Error type definitions
 │   │   └── state-machine.ts    # Complete state machine definitions
@@ -80,34 +90,44 @@ gatekeeper-pwa/
 │   ├── App.tsx                 # Main App component
 │   ├── App.css                 # Component styles with modal and button design
 │   └── main.tsx                # React 18 entry point
-├── index.html                  # Vite HTML template
-├── package.json               # React 18 + TypeScript + Vite dependencies
+├── public/
+│   ├── manifest.json           # PWA manifest for installation
+│   ├── sw.js                   # Service worker for offline support
+│   └── icons/                  # PWA icons (various sizes)
+├── index.html                  # Vite HTML template with PWA meta tags
+├── package.json               # React 18 + TypeScript + Vite + PWA dependencies
 ├── tsconfig.json              # TypeScript strict mode configuration
-├── vite.config.ts             # Vite build configuration
+├── vite.config.ts             # Vite build configuration with PWA plugin
 └── README.md                  # Setup and usage instructions
 ```
 
 ## Architecture Patterns
 - **Hook-Based Architecture**: The primary architectural pattern. All business logic, state management, and service orchestration are handled by custom React Hooks. UI components are simple, presentational, and decoupled from the application's core logic.
+- **Event System Refactoring**: **CRITICAL FIX** - Moved from component-based event handling to hook-based event management to prevent infinite re-render loops that were caused by improper event listener dependencies.
 - **Clean Architecture**: Types → Services → Hooks → Components → App. This is now even more true, with a clearer separation of concerns.
 - **Adapter Chain Pattern**: Still used within the `NetworkService`, which is managed by the `useNetworkService` hook.
 - **Composition of Hooks**: The main `useGatekeeper` hook composes multiple smaller, focused hooks (`useConfig`, `useReachability`, `useNetworkService`, `useStateMachine`) to build complex functionality from simple, reusable pieces.
 - **Service Layer**: Services like `ConfigManager` and `ValidationService` remain, but are now primarily consumed by the hooks instead of directly by UI components.
+- **Memoization & Stability**: Extensive use of `useMemo`, `useCallback`, and stable object references to prevent unnecessary re-renders.
 - **TypeScript**: Strict mode with comprehensive interface definitions.
 - **DRY Principles**: No code duplication, single source of truth for validation/errors.
 
 ## Key Components
 
-### useGatekeeper Hook (`src/hooks/useGatekeeper.ts`)
+### useGatekeeper Hook (`src/hooks/useGatekeeper.ts`) - ARCHITECTURAL CORE
 - **Orchestration**: The main application hook. Integrates configuration, services, and the state machine.
 - **State Management**: Manages the core application state, including the current state from the state machine, network errors, and relay status.
 - **Side Effects**: Contains all the core application logic, such as performing reachability checks and triggering the gate.
+- **Event Handling**: **FIXED** - Uses stable memoized delegate objects and proper dependency arrays to prevent re-render loops.
 - **API for UI**: Exposes a clean, simple interface (`buttonState`, `handleTrigger`, etc.) for the `TriggerButton` component to consume.
+- **Service Integration**: Coordinates between `useConfig`, `useReachability`, `useNetworkService`, and `useStateMachine` hooks.
 
-### TriggerButton (`src/components/TriggerButton.tsx`)
+### TriggerButton (`src/components/TriggerButton.tsx`) - COMPLETELY REFACTORED
 - **Presentation Only**: A "dumb" component that is only responsible for rendering the UI.
 - **No Business Logic**: Contains no application logic, state management, or service interactions.
 - **Props-Driven**: Receives all its data and callbacks as props from the `useGatekeeper` hook.
+- **Performance Fix**: **CRITICAL** - No longer causes infinite re-render loops due to proper separation of concerns.
+- **Enhanced Display**: Shows detailed state information, network status, PWA indicators, and method tracking.
 
 ### useNetworkService Hook (`src/hooks/useNetworkService.ts`)
 - **Lifecycle Management**: Manages the lifecycle of the `NetworkService`.
@@ -124,11 +144,22 @@ gatekeeper-pwa/
 - **Persistence**: Auto-saves to Local Storage via `useConfig`.
 - **UX**: Modal with backdrop close, escape key, form errors.
 
-### useConfig Hook (`src/hooks/useConfig.ts`)
+### ConfigButton (`src/components/ConfigButton.tsx`) - NEW IN PHASE 4
+- **Floating Design**: Top-right positioned floating button with proper z-index
+- **PWA Integration**: Status-aware functionality based on app state
+- **Smart Actions**: Queue processing → Installation prompts → Configuration modal
+- **Accessibility**: Keyboard shortcuts (Ctrl+C), screen reader support, focus management
+- **Mobile Optimized**: 44px+ touch targets, iOS safe area support
+- **Status Indicators**: Visual badges for offline, queue, installable, and processing states
+- **Platform Detection**: Different behavior for iOS Safari vs other browsers
+
+### useConfig Hook (`src/hooks/useConfig.ts`) - ENHANCED FOR PWA
 - **State**: AppConfig with loading/error states.
 - **Methods**: `updateESP32Config`, `updateMQTTConfig`, `validateAndSave`, `reset`, `import`/`export`.
 - **Persistence**: Automatic Local Storage integration via `ConfigManager`.
 - **Validation**: Real-time validation with error reporting.
+- **PWA Integration**: **NEW** - Includes offline status, install status, queue management for PWA features.
+- **State Machine Config**: Enhanced with state machine configuration management and persistence.
 
 ### ConfigManager (`src/services/ConfigManager.ts`)
 - **Storage**: Local Storage with JSON serialization.
@@ -160,6 +191,22 @@ gatekeeper-pwa/
 - **Consistency**: Single source of truth for all validation logic.
 - **Integration**: Used by `ConfigManager`, adapters, and UI components.
 
+### PWA Services (Phase 4 - COMPLETED)
+
+### InstallService (`src/services/InstallService.ts`)
+- **PWA Installation**: Complete beforeinstallprompt handling with cross-platform support
+- **Platform Detection**: iOS Safari manual vs Android/Desktop automatic installation
+- **Installation Flow**: Custom modals with platform-specific instructions
+- **State Management**: Installation status tracking and user interaction analytics
+- **Benefits Presentation**: User education about PWA advantages
+
+### OfflineService (`src/services/OfflineService.ts`)
+- **Queue Management**: Comprehensive offline operation queue with retry logic
+- **Service Worker Integration**: Full coordination with workbox service worker
+- **Background Sync**: Automatic processing when connectivity returns
+- **Gate Trigger Queuing**: Reliable offline gate trigger operations
+- **Sync Status**: Real-time queue status and processing indicators
+
 ### NetworkErrorHandler (`src/network/NetworkErrorHandler.ts`)
 - **Centralized**: All network error categorization and formatting.
 - **Context**: Includes adapter, operation, timing, and configuration details.
@@ -179,6 +226,13 @@ gatekeeper-pwa/
   - `:hover` → scale(1.05) transform
 - **Layout**: Flexbox centering with min-height: 100vh
 - **Typography**: -apple-system font stack for iOS consistency
+- **ConfigButton States**:
+  - `.offline-mode` → Gray with pulse animation
+  - `.has-queue` → Blue with queue count badge
+  - `.installable` → Purple with install icon
+  - `.processing` → Orange with rotation animation
+- **PWA Responsive Design**: iOS safe areas, standalone mode, mobile-first approach
+- **Accessibility**: Focus indicators, high contrast support, reduced motion preferences
 
 ## ESP32 Integration Requirements
 - **Endpoint**: POST /trigger
@@ -189,10 +243,13 @@ gatekeeper-pwa/
 ## Development Workflow
 1. **Start Container**: `docker compose up -d` (if not running)
 2. **Start Development**: `docker exec gatekeeper-node npm run dev`
-3. **Configure ESP32**: Click gear icon in app to set ESP32 IP/port (auto-saved to Local Storage)
-4. **Test Gate Trigger**: Button click → HTTP POST → ESP32 response → Gate activation
-5. **Build for Production**: `docker exec gatekeeper-node npm run build` for static files
-6. **Type Check**: `docker exec gatekeeper-node npm run typecheck` must pass without errors
+3. **Configure ESP32**: Click floating config button (⚙️) in top-right to set ESP32 IP/port
+4. **PWA Testing**: Use Ctrl+C keyboard shortcut to open configuration
+5. **Test Gate Trigger**: Button click → HTTP POST → ESP32 response → Gate activation
+6. **Test PWA Installation**: Use browser's "Install App" or custom installation prompt
+7. **Test Offline Mode**: Disconnect network to test offline queue functionality
+8. **Build for Production**: `docker exec gatekeeper-node npm run build` for static files
+9. **Type Check**: `docker exec gatekeeper-node npm run typecheck` must pass without errors
 
 ## Phase Progression Plan
 - **Phase 0** (COMPLETED): React MVP with hardcoded ESP32 IP
@@ -200,12 +257,14 @@ gatekeeper-pwa/
 - **Phase 2** (COMPLETED): MQTT over WSS fallback with adapter chain pattern
 - **Phase 3** (COMPLETED): Full state machine matching Swift app behavior
 - **Phase 3.5 (Refactor)** (COMPLETED): Migrated to Hook-Based Architecture
-- **Phase 4** (NEXT): PWA features (service worker, offline, installable)
+- **Phase 4** (COMPLETED): PWA features (service worker, offline, installable)
 
 ## File Location Quick Reference
 - **Main Application Logic**: `src/hooks/useGatekeeper.ts`
 - **Main Button UI**: `src/components/TriggerButton.tsx`
 - **Configuration Modal**: `src/components/ConfigModal.tsx:handleSave`
+- **Config Button UI**: `src/components/ConfigButton.tsx:handleAction`
+- **PWA Installation Modal**: `src/components/InstallPrompt.tsx`
 - **Config State Hook**: `src/hooks/useConfig.ts`
 - **State Machine Hook**: `src/hooks/useStateMachine.ts`
 - **Network Service Hook**: `src/hooks/useNetworkService.ts`
@@ -224,7 +283,10 @@ gatekeeper-pwa/
 - **Form Validation**: `src/utils/validation.ts`
 - **Timeout Management**: `src/utils/TimeoutManager.ts:createRetrySchedule`
 - **Network State Manager**: `src/utils/NetworkStateManager.ts:coordinateNetworkState`
-- **Styling**: `src/App.css:.trigger-button` and `.modal-*`
+- **Styling**: `src/App.css:.trigger-button`, `.modal-*`, and `.config-button`
+- **PWA Styles**: `src/App.css:@media (display-mode: standalone)` and `.pwa-*`
+- **Service Worker**: `public/sw.js:*`
+- **PWA Manifest**: `public/manifest.json:*`
 - **Dependencies**: `package.json:dependencies`
 
 ## Common Tasks
@@ -285,11 +347,31 @@ gatekeeper-pwa/
 - ✅ State machine hook for UI integration (`src/hooks/useStateMachine.ts`)
 - ✅ Network state coordination utilities (`src/utils/NetworkStateManager.ts`)
 
-## Phase 4 Requirements (NEXT)
+## Phase 4 Status (COMPLETED)
 **PWA Features and UI Polish:**
-- Service worker implementation for offline capability
-- App manifest for installable PWA
-- Enhanced UI animations and visual polish
-- Push notifications (optional)
-- Background sync for failed requests
-- Advanced error reporting and metrics
+- ✅ InstallService implementation for PWA installation
+- ✅ OfflineService implementation for queue management
+- ✅ Enhanced useConfig hook with PWA integration
+- ✅ PWA status indicators in TriggerButton
+- ✅ Service worker implementation with workbox for offline capability
+- ✅ App manifest for installable PWA with proper icons
+- ✅ ConfigButton with floating design and PWA integration
+- ✅ Cross-platform installation flow with platform detection
+- ✅ Enhanced UI with accessibility and mobile optimization
+- ✅ Background sync for failed requests with service worker
+- ✅ iOS safe area support and standalone mode optimization
+- ✅ Keyboard shortcuts and comprehensive accessibility features
+- ❓ Push notifications (future enhancement)
+- ❓ Advanced error reporting and metrics (future enhancement)
+
+## Critical Architecture Fix Summary
+**INFINITE RE-RENDER LOOP RESOLUTION:**
+The major bug was caused by improper event handling in the component layer. The fix involved:
+
+1. **Event Handler Extraction**: Moved all event handling logic from `TriggerButton` to `useGatekeeper` hook
+2. **Memoization Strategy**: Used `useMemo` for delegate objects and `useCallback` for all handler functions
+3. **Dependency Management**: Proper dependency arrays to prevent unnecessary re-creation of handlers
+4. **Ref Pattern**: Used `useRef` in `useStateMachine` to break circular dependencies in timeout handling
+5. **Service Integration**: Moved service initialization and lifecycle management to dedicated hooks
+
+**Result**: Eliminated infinite re-render loops while maintaining all functionality and improving performance.

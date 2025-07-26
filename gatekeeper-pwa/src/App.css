@@ -1,10 +1,49 @@
+/* CSS Reset - Eliminate browser default margins/padding */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0 !important;
+  padding: 0 !important;
+  height: 100%;
+  width: 100%;
+}
+
+html {
+  font-size: 16px;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  line-height: 1.5;
+}
+
+/* Main container styling */
 .container {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 100vh;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+/* Main content container styling */
+.main-content {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  width: calc(100% - 84px - env(safe-area-inset-right)); /* Account for config button space + iOS margin + safe area */
+  max-width: calc(100% - 84px - env(safe-area-inset-right));
+  margin-right: calc(84px + env(safe-area-inset-right)); /* Ensure space for button + iOS margin + safe area */
+  padding: 0;
+  box-sizing: border-box;
 }
 
 .trigger-button {
@@ -58,24 +97,439 @@
   animation: fade-warning 3s ease-in-out infinite;
 }
 
+/* Floating Configuration Button Design */
 .config-button {
-  background-color: #f0f0f0;
-  border: 1px solid #ccc;
-  border-radius: 8px;
-  padding: 10px 20px;
-  font-size: 1rem;
-  font-weight: 500;
+  position: fixed;
+  top: calc(20px + env(safe-area-inset-top));
+  right: calc(20px + env(safe-area-inset-right));
+  
+  /* Appearance */
+  width: 56px;
+  height: 56px;
+  min-width: 44px; /* Ensure minimum touch target */
+  min-height: 44px;
+  border-radius: 50%;
+  border: none;
+  
+  /* Color scheme matching app theme */
+  background: linear-gradient(135deg, #4CAF50, #45a049);
+  color: white;
+  box-shadow: 0 4px 20px rgba(76, 175, 80, 0.3);
+  
+  /* Typography */
+  font-size: 24px;
+  line-height: 1;
+  
+  /* Interaction */
   cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 100;
+  
+  /* Accessibility */
   display: flex;
   align-items: center;
-  gap: 8px;
-  transition: all 0.2s ease-in-out;
+  justify-content: center;
+  
+  /* Remove text content spacing */
+  padding: 0;
+  margin: 0;
 }
 
 .config-button:hover {
-  background-color: #e0e0e0;
-  border-color: #bbb;
-  transform: translateY(-1px);
+  background: linear-gradient(135deg, #45a049, #388e3c);
+  transform: translateY(-2px) scale(1.05);
+  box-shadow: 0 6px 25px rgba(76, 175, 80, 0.4);
+}
+
+.config-button:active {
+  transform: translateY(-1px) scale(1.02);
+  transition: all 0.1s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.config-button:focus {
+  outline: none;
+  box-shadow: 0 4px 20px rgba(76, 175, 80, 0.4), 0 0 0 3px rgba(76, 175, 80, 0.2);
+}
+
+/* Status-aware config button styling */
+.config-button.has-issues {
+  background: linear-gradient(135deg, #FF9800, #f57c00);
+  animation: pulse-config-warning 2s ease-in-out infinite;
+}
+
+.config-button.has-issues:hover {
+  background: linear-gradient(135deg, #f57c00, #ef6c00);
+}
+
+@keyframes pulse-config-warning {
+  0% { 
+    box-shadow: 0 4px 20px rgba(255, 152, 0, 0.3);
+  }
+  50% { 
+    box-shadow: 0 4px 25px rgba(255, 152, 0, 0.5);
+  }
+  100% { 
+    box-shadow: 0 4px 20px rgba(255, 152, 0, 0.3);
+  }
+}
+
+/* PWA-Specific Configuration Button Enhancements */
+
+/* Standalone mode optimizations */
+@media (display-mode: standalone) {
+  .config-button {
+    /* Enhanced visibility in standalone mode */
+    box-shadow: 0 6px 30px rgba(76, 175, 80, 0.4);
+    z-index: 1000;
+  }
+  
+  .config-button.standalone-mode {
+    /* Indicate standalone mode with subtle border */
+    border: 2px solid rgba(255, 255, 255, 0.2);
+  }
+}
+
+/* iOS Safari specific optimizations */
+@supports (-webkit-touch-callout: none) {
+  .config-button {
+    /* Additional iOS edge gesture margin (included in positioning calc) */
+    margin-right: 4px;
+    margin-top: 4px;
+  }
+}
+
+/* Offline mode styling */
+.config-button.offline-mode {
+  background: linear-gradient(135deg, #757575, #616161);
+  animation: pulse-offline 2s ease-in-out infinite;
+}
+
+.config-button.offline-mode:hover {
+  background: linear-gradient(135deg, #616161, #424242);
+}
+
+@keyframes pulse-offline {
+  0% { 
+    box-shadow: 0 4px 20px rgba(117, 117, 117, 0.3);
+  }
+  50% { 
+    box-shadow: 0 4px 25px rgba(117, 117, 117, 0.5);
+  }
+  100% { 
+    box-shadow: 0 4px 20px rgba(117, 117, 117, 0.3);
+  }
+}
+
+/* Queue processing state */
+.config-button.has-queue {
+  background: linear-gradient(135deg, #2196F3, #1976D2);
+  animation: pulse-queue 1.5s ease-in-out infinite;
+}
+
+.config-button.has-queue:hover {
+  background: linear-gradient(135deg, #1976D2, #1565C0);
+}
+
+@keyframes pulse-queue {
+  0% { 
+    box-shadow: 0 4px 20px rgba(33, 150, 243, 0.4);
+  }
+  50% { 
+    box-shadow: 0 4px 25px rgba(33, 150, 243, 0.6);
+  }
+  100% { 
+    box-shadow: 0 4px 20px rgba(33, 150, 243, 0.4);
+  }
+}
+
+/* PWA installable state */
+.config-button.installable {
+  background: linear-gradient(135deg, #9C27B0, #7B1FA2);
+  animation: pulse-installable 2s ease-in-out infinite;
+}
+
+.config-button.installable:hover {
+  background: linear-gradient(135deg, #7B1FA2, #6A1B9A);
+}
+
+@keyframes pulse-installable {
+  0% { 
+    box-shadow: 0 4px 20px rgba(156, 39, 176, 0.4);
+  }
+  50% { 
+    box-shadow: 0 4px 25px rgba(156, 39, 176, 0.6);
+  }
+  100% { 
+    box-shadow: 0 4px 20px rgba(156, 39, 176, 0.4);
+  }
+}
+
+/* Processing state */
+.config-button.processing {
+  background: linear-gradient(135deg, #FFC107, #FF8F00);
+  cursor: wait;
+  animation: pulse-processing 1s ease-in-out infinite;
+}
+
+@keyframes pulse-processing {
+  0% { 
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% { 
+    opacity: 0.8;
+    transform: scale(0.98);
+  }
+  100% { 
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Config button icon styling */
+.config-icon-primary {
+  position: relative;
+  display: inline-block;
+  transition: transform 0.3s ease;
+}
+
+.config-button:hover .config-icon-primary {
+  transform: rotate(15deg);
+}
+
+.config-button.processing .config-icon-primary {
+  animation: rotate-icon 2s linear infinite;
+}
+
+@keyframes rotate-icon {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* PWA Badge styling */
+.pwa-badge {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #f44336;
+  color: white;
+  font-size: 10px;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(244, 67, 54, 0.3);
+  z-index: 1;
+}
+
+.queue-count {
+  display: inline-block;
+  min-width: 12px;
+  text-align: center;
+}
+
+.offline-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #757575;
+  display: inline-block;
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0% { opacity: 1; }
+  50% { opacity: 0.5; }
+  100% { opacity: 1; }
+}
+
+/* Screen reader only content */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* PWA Installation Prompt Styling */
+.install-prompt-backdrop {
+  z-index: 2000; /* Higher than config modal */
+}
+
+.install-prompt-content {
+  max-width: 500px;
+  width: 90%;
+}
+
+.install-prompt-body {
+  text-align: center;
+  padding: 24px;
+}
+
+.install-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.install-description {
+  font-size: 16px;
+  line-height: 1.5;
+  color: #666;
+  margin-bottom: 24px;
+}
+
+/* iOS Installation Instructions */
+.ios-instructions {
+  text-align: left;
+  background: #f8f9fa;
+  padding: 20px;
+  border-radius: 12px;
+  margin: 20px 0;
+}
+
+.ios-instructions h3 {
+  margin: 0 0 16px 0;
+  color: #333;
+  font-size: 18px;
+}
+
+.install-steps {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.install-steps li {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.install-steps li:last-child {
+  border-bottom: none;
+}
+
+.step-icon {
+  font-size: 20px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.install-steps li strong {
+  color: #4CAF50;
+}
+
+.ios-note {
+  background: #fff3cd;
+  border: 1px solid #ffeaa7;
+  border-radius: 8px;
+  padding: 12px;
+  margin-top: 16px;
+  font-size: 14px;
+  color: #856404;
+}
+
+/* Auto Install Section */
+.auto-install {
+  margin: 20px 0;
+}
+
+.auto-install p {
+  margin-bottom: 16px;
+  color: #666;
+}
+
+.install-button {
+  font-size: 16px;
+  padding: 12px 24px;
+  min-width: 150px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+}
+
+.install-note {
+  font-size: 14px;
+  color: #999;
+  margin-top: 12px;
+  font-style: italic;
+}
+
+/* Installation Benefits */
+.install-benefits {
+  background: #f0f8f0;
+  border: 1px solid #c8e6c8;
+  border-radius: 12px;
+  padding: 20px;
+  margin: 24px 0;
+  text-align: left;
+}
+
+.install-benefits h4 {
+  margin: 0 0 12px 0;
+  color: #2e7d32;
+  font-size: 16px;
+}
+
+.install-benefits ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.install-benefits li {
+  padding: 4px 0;
+  color: #2e7d32;
+  font-size: 14px;
+}
+
+/* Mobile optimizations for install prompt */
+@media (max-width: 768px) {
+  .install-prompt-content {
+    margin: 20px;
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+  
+  .install-prompt-body {
+    padding: 16px;
+  }
+  
+  .install-icon {
+    font-size: 40px;
+  }
+  
+  .ios-instructions {
+    padding: 16px;
+  }
+  
+  .install-steps li {
+    padding: 8px 0;
+  }
+  
+  .step-icon {
+    font-size: 18px;
+  }
+}
+
+/* PWA-specific modal backdrop for iOS */
+@supports (-webkit-touch-callout: none) {
+  .install-prompt-backdrop {
+    /* Ensure proper layering on iOS */
+    -webkit-backdrop-filter: blur(4px);
+    backdrop-filter: blur(4px);
+  }
 }
 
 
@@ -881,6 +1335,21 @@
 
 /* Mobile Responsiveness */
 @media (max-width: 768px) {
+  .main-content {
+    width: calc(100% - 80px - env(safe-area-inset-right)); /* Account for mobile config button space + iOS margin + safe area */
+    max-width: calc(100% - 80px - env(safe-area-inset-right));
+    margin-right: calc(80px + env(safe-area-inset-right)); /* Ensure space for mobile button + iOS margin + safe area */
+  }
+  
+  /* Config button mobile optimizations */
+  .config-button {
+    top: calc(16px + env(safe-area-inset-top));
+    right: calc(16px + env(safe-area-inset-right));
+    width: 52px;
+    height: 52px;
+    font-size: 22px;
+  }
+  
   .modal-backdrop {
     padding: 10px;
   }
@@ -933,6 +1402,51 @@
   .connection-hint {
     text-align: center;
   }
+}
+
+/* Keyboard navigation styles */
+.config-button:focus-visible {
+  outline: none;
+  box-shadow: 0 4px 20px rgba(76, 175, 80, 0.4), 0 0 0 3px rgba(76, 175, 80, 0.3);
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .config-button {
+    border: 2px solid white;
+  }
+  
+  .config-button.has-issues {
+    border-color: #000;
+  }
+}
+
+/* Reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .config-button {
+    transition: none;
+  }
+  
+  .config-button:hover {
+    transform: none;
+  }
+  
+  .config-button.has-issues {
+    animation: none;
+  }
+}
+
+/* Screen reader only utility class */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* PWA-specific styles (Phase 4) */
@@ -1052,11 +1566,6 @@
 
 /* iOS Safari PWA specific styles */
 @media (display-mode: standalone) {
-  .container {
-    padding-top: env(safe-area-inset-top);
-    padding-bottom: env(safe-area-inset-bottom);
-  }
-  
   .install-button {
     display: none; /* Hide install button when already installed */
   }

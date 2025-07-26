@@ -649,11 +649,14 @@ class Logger {
    - **Swift Reference**: `Core/Services/ReachabilityService.swift:*` - Ping logic ✅ ADAPTED
 
 ### **Phase 4: PWA Enhancement (Week 5-6)**
-✅ **GOAL**: Native app experience  
-1. Service worker and offline support
-2. App manifest and installability
-3. Push notifications (optional)
-4. Background sync for failed requests
+✅ **GOAL**: Native app experience - COMPLETED 
+1. ✅ Service worker and offline support with workbox
+2. ✅ App manifest and installability with cross-platform support
+3. ✅ ConfigButton with floating design and PWA integration
+4. ✅ Background sync for failed requests with service worker
+5. ✅ iOS safe area support and standalone mode optimization
+6. ✅ Installation flow with platform detection (iOS vs Android/Desktop)
+7. ❓ Push notifications (future enhancement)
 
 ### **Enhanced Features**
 1. Offline mode support  
@@ -725,22 +728,68 @@ This plan maintains the exact same functionality and user experience as your Swi
 
 ---
 
-### **Phase 3.5: Architectural Refactoring (Post-Implementation)**
+### **Phase 3.5: Architectural Refactoring (COMPLETED)**
 
 **Goal**: Decouple business logic from the UI to improve maintainability, testability, and scalability.
 
 #### **3.5.1 Problem Statement**
 - The `TriggerButton` component became a "God Component," handling state management, service initialization, network logic, and all UI rendering.
-- This led to a performance issue (infinite re-render loop) and made the component difficult to understand and maintain.
+- This led to a **CRITICAL performance issue (infinite re-render loop)** and made the component difficult to understand and maintain.
+- Event handling in components was causing circular dependencies and unstable re-renders.
 
-#### **3.5.2 Solution: Hook-Based Architecture**
+#### **3.5.2 Solution: Hook-Based Architecture with Event System Fix**
 - **Extract Logic into Hooks**: All business logic and service management were extracted from `TriggerButton` into a series of custom hooks.
 - **`useGatekeeper.ts`**: The main orchestration hook that composes other hooks and manages the application's state and side effects.
 - **`useNetworkService.ts` & `useReachability.ts`**: Hooks dedicated to managing the lifecycle of their respective services.
 - **Presentation-Only Component**: `TriggerButton` was refactored into a simple, "dumb" component that only renders the UI based on props received from `useGatekeeper`.
+- **Event System Overhaul**: **CRITICAL FIX** - Moved all event handling from components to hooks with proper memoization.
+- **Memoization Strategy**: Used `useMemo`, `useCallback`, and refs to ensure stable object references.
 
-#### **3.5.3 Benefits**
-- **Separation of Concerns**: Clear boundaries between UI and logic.
-- **Improved Readability**: Smaller, more focused components and hooks.
-- **Enhanced Testability**: Hooks can be tested in isolation.
-- **Scalability**: Easier to add new features without impacting existing code.
+#### **3.5.3 Technical Implementation Details**
+**Event Handling Fixes:**
+1. **Delegate Objects**: Created stable memoized delegate objects in `useGatekeeper` using `useMemo`
+2. **Callback Stability**: All handler functions use `useCallback` with proper dependency arrays
+3. **Ref Pattern**: Used `transitionRef` in `useStateMachine` to break circular timeout dependencies
+4. **Service Lifecycle**: Moved service initialization to dedicated hooks with cleanup functions
+
+**Architectural Changes:**
+- `TriggerButton`: Now purely presentational, receives all data via props
+- `useGatekeeper`: Central orchestration with stable event handlers
+- `useStateMachine`: Fixed timeout handling with ref patterns
+- `useConfig`: Enhanced with PWA features and stable state management
+
+#### **3.5.4 Benefits Achieved**
+- **Performance**: **ELIMINATED infinite re-render loops completely**
+- **Separation of Concerns**: Clear boundaries between UI and logic
+- **Improved Readability**: Smaller, more focused components and hooks
+- **Enhanced Testability**: Hooks can be tested in isolation
+- **Scalability**: Easier to add new features without impacting existing code
+- **Maintainability**: Event handling is centralized and predictable
+
+### **Phase 4: PWA Features Implementation (COMPLETED)**
+
+**Goal**: Complete PWA functionality with service worker, offline support, and installation capabilities.
+
+#### **4.1 Completed PWA Infrastructure**
+- ✅ **InstallService**: Complete PWA installation with cross-platform support
+- ✅ **OfflineService**: Full queue management with service worker integration
+- ✅ **Enhanced useConfig**: Complete PWA status integration and offline queue management
+- ✅ **UI Integration**: Comprehensive PWA status indicators throughout the app
+
+#### **4.2 Completed Implementation**
+- ✅ **Service Worker**: Complete workbox implementation with background sync and caching
+- ✅ **App Manifest**: Full PWA manifest with proper icons and installation metadata
+- ✅ **ConfigButton**: Floating button with PWA-aware functionality and status indicators
+- ✅ **UI Polish**: Enhanced animations, accessibility, and mobile optimization
+- ✅ **Background Sync**: Automatic processing of offline queue when connectivity returns
+- ✅ **Installation Flow**: Platform-specific installation with iOS Safari manual instructions
+- ✅ **Keyboard Shortcuts**: Ctrl+C for configuration with smart conflict avoidance
+- ✅ **iOS Optimization**: Safe area support, standalone mode, gesture conflict avoidance
+
+#### **4.3 ConfigButton Enhancement Details**
+- **Floating Design**: Top-right positioned with proper z-index and mobile optimization
+- **PWA State Awareness**: Dynamic behavior based on offline, queue, installable, and processing states
+- **Visual Indicators**: Color-coded states with animations and badge counts
+- **Smart Actions**: Context-aware functionality (queue processing → installation → configuration)
+- **Accessibility**: Full keyboard navigation, screen reader support, and focus management
+- **Cross-Platform**: Responsive design with iOS safe area and Android/Desktop optimization

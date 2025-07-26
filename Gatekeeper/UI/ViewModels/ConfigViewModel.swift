@@ -10,11 +10,11 @@ import Foundation
 @MainActor
 final class ConfigViewModel: ObservableObject {
     @Published var esp32IPAddress: String = ""
-    @Published var esp32Port: String = "8080"
-    @Published var mqttHost: String = "mqtt.rannow.de"
-    @Published var mqttPort: String = "8883"
-    @Published var mqttUsername: String = "ctl_house_user"
-    @Published var mqttPassword: String = "QuTrur*4gwjxuu@qpPHB"
+    @Published var esp32Port: String = ""
+    @Published var mqttHost: String = ""
+    @Published var mqttPort: String = ""
+    @Published var mqttUsername: String = ""
+    @Published var mqttPassword: String = ""
     
     private let configManager: ConfigManagerProtocol
     private let logger: LoggerProtocol

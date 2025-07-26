@@ -7,7 +7,7 @@ Listens on 0.0.0.0:8080, replies to the *exact* sender in two steps:
 import socket, time, struct, sys
 
 HOST = ""        # 0.0.0.0 – listen on all interfaces
-PORT = 8050
+PORT = 80
 
 with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
     sock.bind((HOST, PORT))

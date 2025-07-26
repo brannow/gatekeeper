@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { createNetworkService } from '../services/NetworkService';
 import { createHttpAdapter } from '../adapters/HttpAdapter';
 import { createMqttAdapter } from '../adapters/MqttAdapter';
@@ -36,20 +36,11 @@ const TriggerButton: React.FC = () => {
     (config.mqtt.host && config.mqtt.port)
   );
   
-  // Initialize state machine
-  const stateMachine = useStateMachine({
+  // Initialize state machine and memoize it to prevent re-creation on every render
+  const stateMachine = useMemo(() => useStateMachine({
     initialState: 'ready',
     onStateChange: (from, to, action) => {
       console.log(`[TriggerButton] State transition: ${from} → ${to} (${action})`);
-      
-      // Handle specific state transitions
-      if (to === 'checkingNetwork') {
-        performReachabilityCheck();
-      }
-      
-      if (to === 'triggering') {
-        performGateTrigger();
-      }
     },
     onTimeout: (state) => {
       console.warn(`[TriggerButton] State ${state} timed out`);
@@ -60,8 +51,8 @@ const TriggerButton: React.FC = () => {
       setNetworkError(errorMsg);
     },
     enableLogging: true
-  });
-  
+  }), []); // Empty dependency array ensures this only runs once
+
   // Get button state information
   const buttonState = useButtonState(stateMachine, isConfigured);
 
@@ -165,6 +156,18 @@ const TriggerButton: React.FC = () => {
       });
     }
   }, [networkService, stateMachine, offlineStatus, config, queueGateTrigger]);
+
+  // This effect handles the side effects of state transitions
+  useEffect(() => {
+    switch (stateMachine.currentState) {
+      case 'checkingNetwork':
+        performReachabilityCheck();
+        break;
+      case 'triggering':
+        performGateTrigger();
+        break;
+    }
+  }, [stateMachine.currentState, performReachabilityCheck, performGateTrigger]);
   
   // Initialize services when config changes
   useEffect(() => {

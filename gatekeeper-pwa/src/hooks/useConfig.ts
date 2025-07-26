@@ -521,7 +521,7 @@ export function useConfig(): EnhancedConfigHookInterface {
       console.error(`[useConfig] Failed to update ${type} reachability status:`, err);
       // Don't throw error for reachability status updates to avoid disrupting the UI
     }
-  }, [config]);
+  }, [config, setConfig]);
 
   /**
    * Updates state machine configuration with validation and persistence

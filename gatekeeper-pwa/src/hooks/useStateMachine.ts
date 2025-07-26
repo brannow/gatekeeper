@@ -4,7 +4,7 @@
  * Integrates with ReachabilityService and NetworkService for complete state management
  */
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import type { 
   GateState, 
   GateAction, 
@@ -93,6 +93,10 @@ export function useStateMachine(config: UseStateMachineConfig = {}): UseStateMac
     }
   }, []);
 
+  // `transition` needs to be defined before `setStateTimeout` because `setStateTimeout` calls `transition`
+  // We'll use a ref for `transition` inside `setStateTimeout` to avoid circular dependencies in `useCallback`
+  const transitionRef = useRef<StateManagerInterface['transition']>();
+
   /**
    * Set timeout for current state
    */
@@ -118,8 +122,8 @@ export function useStateMachine(config: UseStateMachineConfig = {}): UseStateMac
             break;
         }
         
-        // Trigger timeout transition
-        transition(timeoutAction, { error: `${state} operation timed out` });
+        // Trigger timeout transition using the ref
+        transitionRef.current?.(timeoutAction, { error: `${state} operation timed out` });
         onTimeout?.(state);
         
       }, timeout) as unknown as number;
@@ -193,6 +197,11 @@ export function useStateMachine(config: UseStateMachineConfig = {}): UseStateMac
     return true;
     
   }, [currentState, updateState, log]);
+
+  // Update the ref whenever the `transition` function changes
+  useEffect(() => {
+    transitionRef.current = transition;
+  }, [transition]);
 
   /**
    * Check if transition is valid
@@ -301,11 +310,6 @@ export function useStateMachine(config: UseStateMachineConfig = {}): UseStateMac
     return getElapsedTime() > timeout;
   }, [currentState, getElapsedTime]);
 
-  // Derived state
-  const stateInfo = getStateInfo();
-  const isTransitional = isTransitionalState(currentState);
-  const canRetry = STATE_METADATA[currentState].canRetry;
-
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -313,7 +317,8 @@ export function useStateMachine(config: UseStateMachineConfig = {}): UseStateMac
     };
   }, [clearStateTimeout]);
 
-  return {
+  // Memoize the returned object to ensure stability
+  return useMemo(() => ({
     // StateManagerInterface implementation
     currentState,
     transition,
@@ -323,9 +328,9 @@ export function useStateMachine(config: UseStateMachineConfig = {}): UseStateMac
     reset,
     
     // Additional hook features
-    stateInfo,
-    isTransitional,
-    canRetry,
+    stateInfo: getStateInfo(),
+    isTransitional: isTransitionalState(currentState),
+    canRetry: STATE_METADATA[currentState].canRetry,
     
     // Action methods
     triggerGate,
@@ -336,7 +341,20 @@ export function useStateMachine(config: UseStateMachineConfig = {}): UseStateMac
     forceState,
     getElapsedTime,
     hasTimedOut
-  };
+  }), [
+    currentState,
+    transition,
+    canTransition,
+    getStateInfo,
+    getValidActions,
+    reset,
+    triggerGate,
+    checkNetwork,
+    retry,
+    forceState,
+    getElapsedTime,
+    hasTimedOut,
+  ]);
 }
 
 /**

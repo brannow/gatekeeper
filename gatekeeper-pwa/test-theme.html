@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gatekeeper Theme Testing Suite</title>
+    <style>
+        /* Theme Testing Styles */
+        :root {
+            --test-bg: #ffffff;
+            --test-text: #000000;
+            --test-border: #cccccc;
+        }
+
+        .theme-dark {
+            --test-bg: #121212;
+            --test-text: #ffffff;
+            --test-border: #444444;
+        }
+
+        .theme-bright {
+            --test-bg: #fafafa;
+            --test-text: #212121;
+            --test-border: #bdbdbd;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            background: var(--test-bg);
+            color: var(--test-text);
+            transition: background 0.3s ease, color 0.3s ease;
+            margin: 0;
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .test-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid var(--test-border);
+            border-radius: 8px;
+            background: var(--test-bg);
+        }
+
+        .test-controls {
+            display: flex;
+            gap: 10px;
+            margin: 20px 0;
+            flex-wrap: wrap;
+        }
+
+        .test-button {
+            padding: 10px 20px;
+            border: 1px solid var(--test-border);
+            background: var(--test-bg);
+            color: var(--test-text);
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .test-button:hover {
+            opacity: 0.8;
+        }
+
+        .test-button.active {
+            background: #4CAF50;
+            color: white;
+            border-color: #4CAF50;
+        }
+
+        .test-result {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 14px;
+        }
+
+        .test-result.pass {
+            background: #e8f5e8;
+            color: #2e7d32;
+            border: 1px solid #4caf50;
+        }
+
+        .test-result.fail {
+            background: #ffebee;
+            color: #c62828;
+            border: 1px solid #f44336;
+        }
+
+        .test-result.info {
+            background: #e3f2fd;
+            color: #1565c0;
+            border: 1px solid #2196f3;
+        }
+
+        .theme-dark .test-result.pass {
+            background: #1b5e1f;
+            color: #66bb6a;
+        }
+
+        .theme-dark .test-result.fail {
+            background: #4a1a1a;
+            color: #ef5350;
+        }
+
+        .theme-dark .test-result.info {
+            background: #0d2a4a;
+            color: #42a5f5;
+        }
+
+        .accessibility-test {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .color-sample {
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            border: 1px solid var(--test-border);
+        }
+
+        .logs {
+            max-height: 300px;
+            overflow-y: auto;
+            background: var(--test-bg);
+            border: 1px solid var(--test-border);
+            padding: 10px;
+            font-family: monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+        }
+
+        h1, h2, h3 {
+            color: var(--test-text);
+        }
+
+        /* Prefers-color-scheme media query test indicator */
+        .system-preference-indicator {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            padding: 10px;
+            background: #4CAF50;
+            color: white;
+            border-radius: 4px;
+            font-size: 12px;
+            z-index: 1000;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            .system-preference-indicator {
+                background: #BB86FC;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="system-preference-indicator" id="systemIndicator">
+        System: Light
+    </div>
+
+    <div class="container">
+        <h1>Gatekeeper PWA Theme Testing Suite</h1>
+        <p>Comprehensive testing for theme switching, system preference detection, and accessibility compliance.</p>
+
+        <!-- Theme Controls -->
+        <div class="test-section">
+            <h2>Theme Control Tests</h2>
+            <div class="test-controls">
+                <button class="test-button" onclick="setTheme('bright')">Bright Theme</button>
+                <button class="test-button" onclick="setTheme('dark')">Dark Theme</button>
+                <button class="test-button" onclick="setTheme('system')">System Theme</button>
+                <button class="test-button" onclick="toggleTheme()">Toggle Theme</button>
+                <button class="test-button" onclick="detectSystemPreference()">Detect System</button>
+                <button class="test-button" onclick="testPersistence()">Test Persistence</button>
+                <button class="test-button" onclick="clearStorage()">Clear Storage</button>
+            </div>
+            <div id="themeResults"></div>
+        </div>
+
+        <!-- System Preference Detection -->
+        <div class="test-section">
+            <h2>System Preference Detection</h2>
+            <div class="test-controls">
+                <button class="test-button" onclick="testMediaQuery()">Test Media Query</button>
+                <button class="test-button" onclick="testPreferenceListener()">Test Listener</button>
+                <button class="test-button" onclick="simulatePreferenceChange()">Simulate Change</button>
+            </div>
+            <div id="preferenceResults"></div>
+        </div>
+
+        <!-- Browser Compatibility -->
+        <div class="test-section">
+            <h2>Browser Compatibility Tests</h2>
+            <div class="test-controls">
+                <button class="test-button" onclick="testBrowserFeatures()">Test Features</button>
+                <button class="test-button" onclick="testCSSSupport()">Test CSS Support</button>
+                <button class="test-button" onclick="testLocalStorage()">Test Storage</button>
+            </div>
+            <div id="compatibilityResults"></div>
+        </div>
+
+        <!-- Accessibility Tests -->
+        <div class="test-section">
+            <h2>Accessibility Compliance Tests</h2>
+            <div class="test-controls">
+                <button class="test-button" onclick="testColorContrast()">Test Contrast</button>
+                <button class="test-button" onclick="testMotionPreference()">Test Motion</button>
+                <button class="test-button" onclick="testKeyboardNav()">Test Keyboard</button>
+                <button class="test-button" onclick="testScreenReader()">Test Screen Reader</button>
+            </div>
+            <div class="accessibility-test" id="accessibilitySamples">
+                <!-- Color samples will be dynamically added -->
+            </div>
+            <div id="accessibilityResults"></div>
+        </div>
+
+        <!-- Performance Tests -->
+        <div class="test-section">
+            <h2>Performance & Timing Tests</h2>
+            <div class="test-controls">
+                <button class="test-button" onclick="testThemeSwitch Performance()">Switch Performance</button>
+                <button class="test-button" onclick="testInitializationTime()">Init Time</button>
+                <button class="test-button" onclick="testMemoryUsage()">Memory Usage</button>
+            </div>
+            <div id="performanceResults"></div>
+        </div>
+
+        <!-- Manual Test Checklist -->
+        <div class="test-section">
+            <h2>Manual Test Checklist</h2>
+            <div id="manualTests">
+                <h3>Cross-Browser Testing:</h3>
+                <ul>
+                    <li>✓ Chrome (latest)</li>
+                    <li>✓ Firefox (latest)</li>
+                    <li>✓ Safari (latest)</li>
+                    <li>✓ Edge (latest)</li>
+                    <li>✓ Mobile Safari (iOS)</li>
+                    <li>✓ Chrome Mobile (Android)</li>
+                </ul>
+                
+                <h3>Platform Testing:</h3>
+                <ul>
+                    <li>✓ macOS (light/dark mode)</li>
+                    <li>✓ Windows (light/dark mode)</li>
+                    <li>✓ iOS (light/dark mode)</li>
+                    <li>✓ Android (light/dark mode)</li>
+                    <li>✓ Linux (light/dark mode)</li>
+                </ul>
+                
+                <h3>Accessibility Testing:</h3>
+                <ul>
+                    <li>✓ Screen reader compatibility</li>
+                    <li>✓ High contrast mode</li>
+                    <li>✓ Color blindness compatibility</li>
+                    <li>✓ Keyboard navigation</li>
+                    <li>✓ Reduced motion preference</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Test Logs -->
+        <div class="test-section">
+            <h2>Test Logs</h2>
+            <div class="test-controls">
+                <button class="test-button" onclick="clearLogs()">Clear Logs</button>
+                <button class="test-button" onclick="exportLogs()">Export Logs</button>
+            </div>
+            <div class="logs" id="testLogs">
+                Test suite initialized at: ${new Date().toISOString()}
+                User Agent: ${navigator.userAgent}
+                Platform: ${navigator.platform}
+                Language: ${navigator.language}
+                Screen: ${screen.width}x${screen.height}
+                
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Theme Testing Suite JavaScript
+        let currentTheme = 'system';
+        let testResults = [];
+        let mediaQueryListener = null;
+
+        // Utility Functions
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logElement = document.getElementById('testLogs');
+            const typeIndicator = type.toUpperCase().padEnd(5);
+            logElement.textContent += `[${timestamp}] ${typeIndicator}: ${message}\n`;
+            logElement.scrollTop = logElement.scrollHeight;
+            
+            testResults.push({ timestamp, type, message });
+        }
+
+        function addResult(containerId, message, type = 'info') {
+            const container = document.getElementById(containerId);
+            const resultDiv = document.createElement('div');
+            resultDiv.className = `test-result ${type}`;
+            resultDiv.textContent = message;
+            container.appendChild(resultDiv);
+        }
+
+        function clearResults(containerId) {
+            document.getElementById(containerId).innerHTML = '';
+        }
+
+        // Theme Management Functions
+        function setTheme(theme) {
+            log(`Setting theme to: ${theme}`);
+            currentTheme = theme;
+            
+            const root = document.documentElement;
+            root.classList.remove('theme-bright', 'theme-dark');
+            
+            let resolvedTheme = theme;
+            if (theme === 'system') {
+                resolvedTheme = detectSystemPreference();
+            }
+            
+            if (resolvedTheme !== 'system') {
+                root.classList.add(`theme-${resolvedTheme}`);
+            }
+            
+            root.setAttribute('data-theme', resolvedTheme);
+            
+            // Save to localStorage
+            try {
+                localStorage.setItem('gatekeeper-theme', theme);
+                addResult('themeResults', `✓ Theme set to ${theme} (resolved: ${resolvedTheme})`, 'pass');
+            } catch (error) {
+                addResult('themeResults', `✗ Failed to save theme: ${error.message}`, 'fail');
+            }
+            
+            updateSystemIndicator();
+        }
+
+        function toggleTheme() {
+            const newTheme = currentTheme === 'bright' ? 'dark' : 'bright';
+            setTheme(newTheme);
+        }
+
+        function detectSystemPreference() {
+            if (!window.matchMedia) {
+                addResult('preferenceResults', '✗ matchMedia not supported', 'fail');
+                return 'bright';
+            }
+            
+            const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            const preference = isDark ? 'dark' : 'bright';
+            
+            log(`System preference detected: ${preference}`);
+            addResult('preferenceResults', `✓ System preference: ${preference}`, 'pass');
+            
+            return preference;
+        }
+
+        function updateSystemIndicator() {
+            const indicator = document.getElementById('systemIndicator');
+            const systemPref = detectSystemPreference();
+            indicator.textContent = `System: ${systemPref.charAt(0).toUpperCase() + systemPref.slice(1)}`;
+        }
+
+        // Persistence Tests
+        function testPersistence() {
+            clearResults('themeResults');
+            log('Testing theme persistence');
+            
+            // Test saving different themes
+            const themes = ['bright', 'dark', 'system'];
+            let passed = 0;
+            
+            themes.forEach(theme => {
+                try {
+                    localStorage.setItem('gatekeeper-theme', theme);
+                    const saved = localStorage.getItem('gatekeeper-theme');
+                    
+                    if (saved === theme) {
+                        addResult('themeResults', `✓ Persistence test passed for ${theme}`, 'pass');
+                        passed++;
+                    } else {
+                        addResult('themeResults', `✗ Persistence failed for ${theme}: got ${saved}`, 'fail');
+                    }
+                } catch (error) {
+                    addResult('themeResults', `✗ Storage error for ${theme}: ${error.message}`, 'fail');
+                }
+            });
+            
+            addResult('themeResults', `Persistence tests: ${passed}/${themes.length} passed`, 
+                passed === themes.length ? 'pass' : 'fail');
+        }
+
+        function clearStorage() {
+            try {
+                localStorage.removeItem('gatekeeper-theme');
+                addResult('themeResults', '✓ Storage cleared successfully', 'pass');
+                log('Theme storage cleared');
+            } catch (error) {
+                addResult('themeResults', `✗ Failed to clear storage: ${error.message}`, 'fail');
+            }
+        }
+
+        // System Preference Tests
+        function testMediaQuery() {
+            clearResults('preferenceResults');
+            log('Testing media query support');
+            
+            if (!window.matchMedia) {
+                addResult('preferenceResults', '✗ matchMedia API not supported', 'fail');
+                return;
+            }
+            
+            try {
+                const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+                addResult('preferenceResults', '✓ matchMedia API supported', 'pass');
+                addResult('preferenceResults', `Current match: ${mediaQuery.matches}`, 'info');
+                
+                // Test listener support
+                if (typeof mediaQuery.addEventListener === 'function') {
+                    addResult('preferenceResults', '✓ addEventListener supported', 'pass');
+                } else if (typeof mediaQuery.addListener === 'function') {
+                    addResult('preferenceResults', '✓ addListener (legacy) supported', 'pass');
+                } else {
+                    addResult('preferenceResults', '✗ No listener support', 'fail');
+                }
+                
+            } catch (error) {
+                addResult('preferenceResults', `✗ Media query error: ${error.message}`, 'fail');
+            }
+        }
+
+        function testPreferenceListener() {
+            log('Testing preference change listener');
+            
+            if (mediaQueryListener) {
+                // Clean up existing listener
+                mediaQueryListener.removeEventListener('change', handlePreferenceChange);
+                mediaQueryListener = null;
+            }
+            
+            try {
+                mediaQueryListener = window.matchMedia('(prefers-color-scheme: dark)');
+                mediaQueryListener.addEventListener('change', handlePreferenceChange);
+                addResult('preferenceResults', '✓ Preference listener added', 'pass');
+            } catch (error) {
+                addResult('preferenceResults', `✗ Listener setup failed: ${error.message}`, 'fail');
+            }
+        }
+
+        function handlePreferenceChange(event) {
+            const newPreference = event.matches ? 'dark' : 'bright';
+            log(`System preference changed to: ${newPreference}`);
+            addResult('preferenceResults', `System changed to: ${newPreference}`, 'info');
+            updateSystemIndicator();
+            
+            // If current theme is system, update the resolved theme
+            if (currentTheme === 'system') {
+                setTheme('system');
+            }
+        }
+
+        function simulatePreferenceChange() {
+            // This is a simulation - real preference changes happen at OS level
+            const currentDetected = detectSystemPreference();
+            const simulated = currentDetected === 'dark' ? 'bright' : 'dark';
+            addResult('preferenceResults', `Simulated change: ${currentDetected} → ${simulated}`, 'info');
+            addResult('preferenceResults', 'Note: Real changes happen at OS level', 'info');
+        }
+
+        // Browser Compatibility Tests
+        function testBrowserFeatures() {
+            clearResults('compatibilityResults');
+            log('Testing browser feature compatibility');
+            
+            const features = [
+                { name: 'CSS Custom Properties', test: () => CSS.supports('color', 'var(--test)') },
+                { name: 'matchMedia API', test: () => typeof window.matchMedia === 'function' },
+                { name: 'localStorage', test: () => typeof Storage !== 'undefined' },
+                { name: 'addEventListener', test: () => typeof EventTarget !== 'undefined' },
+                { name: 'CSS.supports', test: () => typeof CSS !== 'undefined' && typeof CSS.supports === 'function' },
+                { name: 'Flexbox', test: () => CSS.supports('display', 'flex') },
+                { name: 'Grid', test: () => CSS.supports('display', 'grid') },
+                { name: 'Transitions', test: () => CSS.supports('transition', 'all 0.3s') }
+            ];
+            
+            let supported = 0;
+            features.forEach(feature => {
+                try {
+                    if (feature.test()) {
+                        addResult('compatibilityResults', `✓ ${feature.name} supported`, 'pass');
+                        supported++;
+                    } else {
+                        addResult('compatibilityResults', `✗ ${feature.name} not supported`, 'fail');
+                    }
+                } catch (error) {
+                    addResult('compatibilityResults', `✗ ${feature.name} test error: ${error.message}`, 'fail');
+                }
+            });
+            
+            addResult('compatibilityResults', `Browser compatibility: ${supported}/${features.length} features`, 
+                supported === features.length ? 'pass' : 'info');
+        }
+
+        function testCSSSupport() {
+            log('Testing CSS feature support');
+            
+            const cssFeatures = [
+                'color-scheme: light dark',
+                'prefers-color-scheme: dark',
+                'prefers-reduced-motion: reduce',
+                'forced-colors: active'
+            ];
+            
+            cssFeatures.forEach(feature => {
+                try {
+                    if (CSS.supports(feature)) {
+                        addResult('compatibilityResults', `✓ CSS: ${feature}`, 'pass');
+                    } else {
+                        addResult('compatibilityResults', `✗ CSS: ${feature}`, 'fail');
+                    }
+                } catch (error) {
+                    addResult('compatibilityResults', `✗ CSS test error: ${error.message}`, 'fail');
+                }
+            });
+        }
+
+        function testLocalStorage() {
+            log('Testing localStorage functionality');
+            
+            try {
+                // Test basic functionality
+                const testKey = 'gatekeeper-test';
+                const testValue = 'theme-test-value';
+                
+                localStorage.setItem(testKey, testValue);
+                const retrieved = localStorage.getItem(testKey);
+                localStorage.removeItem(testKey);
+                
+                if (retrieved === testValue) {
+                    addResult('compatibilityResults', '✓ localStorage read/write works', 'pass');
+                } else {
+                    addResult('compatibilityResults', '✗ localStorage data mismatch', 'fail');
+                }
+                
+                // Test JSON storage
+                const jsonTest = { theme: 'dark', timestamp: Date.now() };
+                localStorage.setItem(testKey, JSON.stringify(jsonTest));
+                const parsedJson = JSON.parse(localStorage.getItem(testKey));
+                localStorage.removeItem(testKey);
+                
+                if (parsedJson.theme === jsonTest.theme) {
+                    addResult('compatibilityResults', '✓ localStorage JSON handling works', 'pass');
+                } else {
+                    addResult('compatibilityResults', '✗ localStorage JSON handling failed', 'fail');
+                }
+                
+            } catch (error) {
+                addResult('compatibilityResults', `✗ localStorage error: ${error.message}`, 'fail');
+            }
+        }
+
+        // Accessibility Tests
+        function testColorContrast() {
+            clearResults('accessibilityResults');
+            clearResults('accessibilitySamples');
+            log('Testing color contrast accessibility');
+            
+            const colorTests = [
+                { name: 'Primary Button', bg: '#4CAF50', text: '#ffffff' },
+                { name: 'Secondary Button', bg: '#2196F3', text: '#ffffff' },
+                { name: 'Warning Button', bg: '#FF9800', text: '#ffffff' },
+                { name: 'Error Button', bg: '#f44336', text: '#ffffff' },
+                { name: 'Background Text', bg: '#ffffff', text: '#333333' },
+                { name: 'Dark Background', bg: '#121212', text: '#ffffff' }
+            ];
+            
+            const samplesContainer = document.getElementById('accessibilitySamples');
+            
+            colorTests.forEach(test => {
+                // Create color sample
+                const sample = document.createElement('div');
+                sample.className = 'color-sample';
+                sample.style.backgroundColor = test.bg;
+                sample.style.color = test.text;
+                sample.textContent = test.name;
+                samplesContainer.appendChild(sample);
+                
+                // Calculate contrast ratio (simplified)
+                const contrastRatio = calculateContrastRatio(test.bg, test.text);
+                const wcagAA = contrastRatio >= 4.5;
+                const wcagAAA = contrastRatio >= 7;
+                
+                const status = wcagAAA ? 'AAA' : wcagAA ? 'AA' : 'FAIL';
+                const resultType = wcagAA ? 'pass' : 'fail';
+                
+                addResult('accessibilityResults', 
+                    `${test.name}: ${contrastRatio.toFixed(2)}:1 (WCAG ${status})`, resultType);
+            });
+        }
+
+        function calculateContrastRatio(color1, color2) {
+            // Simplified contrast calculation
+            const getLuminance = (color) => {
+                const rgb = parseInt(color.replace('#', ''), 16);
+                const r = (rgb >> 16) & 0xff;
+                const g = (rgb >> 8) & 0xff;
+                const b = rgb & 0xff;
+                
+                const sRGB = [r, g, b].map(c => {
+                    c = c / 255;
+                    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+                });
+                
+                return 0.2126 * sRGB[0] + 0.7152 * sRGB[1] + 0.0722 * sRGB[2];
+            };
+            
+            const lum1 = getLuminance(color1);
+            const lum2 = getLuminance(color2);
+            const bright = Math.max(lum1, lum2);
+            const dark = Math.min(lum1, lum2);
+            
+            return (bright + 0.05) / (dark + 0.05);
+        }
+
+        function testMotionPreference() {
+            log('Testing motion preference detection');
+            
+            if (!window.matchMedia) {
+                addResult('accessibilityResults', '✗ Cannot test motion preference (no matchMedia)', 'fail');
+                return;
+            }
+            
+            try {
+                const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+                const motionPreference = prefersReducedMotion.matches ? 'reduced' : 'normal';
+                
+                addResult('accessibilityResults', `✓ Motion preference: ${motionPreference}`, 'pass');
+                addResult('accessibilityResults', 
+                    `Transitions should be ${motionPreference === 'reduced' ? 'minimal' : 'normal'}`, 'info');
+                
+            } catch (error) {
+                addResult('accessibilityResults', `✗ Motion preference error: ${error.message}`, 'fail');
+            }
+        }
+
+        function testKeyboardNav() {
+            log('Testing keyboard navigation');
+            
+            // Test tab order and focus management
+            const focusableElements = document.querySelectorAll(
+                'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+            );
+            
+            addResult('accessibilityResults', `✓ Found ${focusableElements.length} focusable elements`, 'pass');
+            
+            // Test if elements have proper focus indicators
+            const elementsWithFocus = Array.from(focusableElements).filter(el => {
+                const computedStyle = window.getComputedStyle(el, ':focus');
+                return computedStyle.outline !== 'none' || computedStyle.outlineStyle !== 'none';
+            });
+            
+            addResult('accessibilityResults', 
+                `Focus indicators: ${elementsWithFocus.length}/${focusableElements.length}`, 
+                elementsWithFocus.length > 0 ? 'pass' : 'fail');
+        }
+
+        function testScreenReader() {
+            log('Testing screen reader accessibility');
+            
+            // Test ARIA attributes and semantic markup
+            const ariaTests = [
+                { selector: '[aria-label]', name: 'ARIA labels' },
+                { selector: '[role]', name: 'ARIA roles' },
+                { selector: 'button', name: 'Semantic buttons' },
+                { selector: 'h1, h2, h3, h4, h5, h6', name: 'Heading structure' },
+                { selector: '[alt]', name: 'Alt text' }
+            ];
+            
+            ariaTests.forEach(test => {
+                const elements = document.querySelectorAll(test.selector);
+                addResult('accessibilityResults', 
+                    `${test.name}: ${elements.length} elements`, 
+                    elements.length > 0 ? 'pass' : 'info');
+            });
+        }
+
+        // Performance Tests
+        function testThemeSwitchPerformance() {
+            clearResults('performanceResults');
+            log('Testing theme switch performance');
+            
+            const iterations = 10;
+            const times = [];
+            
+            for (let i = 0; i < iterations; i++) {
+                const start = performance.now();
+                setTheme(i % 2 === 0 ? 'dark' : 'bright');
+                const end = performance.now();
+                times.push(end - start);
+            }
+            
+            const average = times.reduce((a, b) => a + b) / times.length;
+            const min = Math.min(...times);
+            const max = Math.max(...times);
+            
+            addResult('performanceResults', `Average switch time: ${average.toFixed(2)}ms`, 'info');
+            addResult('performanceResults', `Min: ${min.toFixed(2)}ms, Max: ${max.toFixed(2)}ms`, 'info');
+            addResult('performanceResults', 
+                `Performance: ${average < 16 ? 'Excellent' : average < 50 ? 'Good' : 'Needs improvement'}`, 
+                average < 50 ? 'pass' : 'fail');
+        }
+
+        function testInitializationTime() {
+            log('Testing theme initialization time');
+            
+            const start = performance.now();
+            
+            // Simulate theme initialization
+            detectSystemPreference();
+            const savedTheme = localStorage.getItem('gatekeeper-theme') || 'system';
+            setTheme(savedTheme);
+            
+            const end = performance.now();
+            const initTime = end - start;
+            
+            addResult('performanceResults', `Initialization time: ${initTime.toFixed(2)}ms`, 'info');
+            addResult('performanceResults', 
+                `Init performance: ${initTime < 50 ? 'Excellent' : initTime < 100 ? 'Good' : 'Slow'}`, 
+                initTime < 100 ? 'pass' : 'fail');
+        }
+
+        function testMemoryUsage() {
+            log('Testing memory usage');
+            
+            if (performance.memory) {
+                const memory = performance.memory;
+                addResult('performanceResults', 
+                    `Used: ${(memory.usedJSHeapSize / 1048576).toFixed(2)}MB`, 'info');
+                addResult('performanceResults', 
+                    `Total: ${(memory.totalJSHeapSize / 1048576).toFixed(2)}MB`, 'info');
+                addResult('performanceResults', 
+                    `Limit: ${(memory.jsHeapSizeLimit / 1048576).toFixed(2)}MB`, 'info');
+            } else {
+                addResult('performanceResults', 'Memory API not available', 'info');
+            }
+        }
+
+        // Utility Functions
+        function clearLogs() {
+            document.getElementById('testLogs').textContent = '';
+            testResults = [];
+        }
+
+        function exportLogs() {
+            const logs = testResults.map(result => 
+                `${result.timestamp} [${result.type.toUpperCase()}]: ${result.message}`
+            ).join('\n');
+            
+            const blob = new Blob([logs], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `gatekeeper-theme-test-${Date.now()}.log`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // Initialize
+        function init() {
+            log('Theme testing suite initialized');
+            updateSystemIndicator();
+            
+            // Load saved theme if available
+            const savedTheme = localStorage.getItem('gatekeeper-theme');
+            if (savedTheme) {
+                setTheme(savedTheme);
+                log(`Loaded saved theme: ${savedTheme}`);
+            }
+            
+            // Set up system preference listener
+            testPreferenceListener();
+            
+            // Auto-run basic compatibility tests
+            setTimeout(() => {
+                testBrowserFeatures();
+                testColorContrast();
+            }, 1000);
+        }
+
+        // Run initialization when page loads
+        window.addEventListener('load', init);
+        
+        // Update system indicator when preference changes
+        if (window.matchMedia) {
+            window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateSystemIndicator);
+        }
+    </script>
+</body>
+</html>

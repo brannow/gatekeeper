@@ -5,7 +5,7 @@ import { createNetworkService } from '../services/NetworkService';
 import { createHttpAdapter } from '../adapters/HttpAdapter';
 import { createMqttAdapter } from '../adapters/MqttAdapter';
 import type { NetworkResult } from '../types/network';
-import type { ValidationError } from '../types';
+import type { ValidationError, ThemeMode, AppConfig } from '../types';
 
 interface ConfigModalProps {
   isOpen: boolean;
@@ -24,6 +24,7 @@ interface FormState {
     password: string;
     ssl: boolean;
   };
+  theme: ThemeMode;
 }
 
 interface FormErrors {
@@ -37,12 +38,17 @@ interface FormErrors {
     username?: string;
     password?: string;
   };
+  theme?: {
+    theme?: string;
+  };
 }
 
-type TabType = 'esp32' | 'mqtt';
+type TabType = 'esp32' | 'mqtt' | 'theme';
 
 const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose }) => {
-  const { config, updateESP32Config, updateMQTTConfig, updateReachabilityStatus, loading } = useConfig();
+  const configHook = useConfig();
+  
+  const { config, validateAndSave, updateReachabilityStatus, loading } = configHook;
   const [activeTab, setActiveTab] = useState<TabType>('esp32');
   
   const [formState, setFormState] = useState<FormState>({
@@ -56,35 +62,61 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose }) => {
       username: '',
       password: '',
       ssl: false
-    }
+    },
+    theme: 'system'
   });
   
   const [formErrors, setFormErrors] = useState<FormErrors>({
     esp32: {},
-    mqtt: {}
+    mqtt: {},
+    theme: {}
   });
   
   const [isSaving, setIsSaving] = useState(false);
 
-  // Initialize form state when modal opens or config changes
+  // Initialize form state when modal opens
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && !loading) {
       setFormState({
         esp32: {
           host: config.esp32.host,
-          port: config.esp32.port.toString()
+          // Only show port if host exists, otherwise empty string
+          port: config.esp32.host ? config.esp32.port.toString() : ''
         },
         mqtt: {
           host: config.mqtt.host,
-          port: config.mqtt.port.toString(),
+          // Only show port if host exists, otherwise empty string
+          port: config.mqtt.host ? config.mqtt.port.toString() : '',
           username: config.mqtt.username || '',
           password: config.mqtt.password || '',
           ssl: config.mqtt.ssl
-        }
+        },
+        theme: config.theme
       });
-      setFormErrors({ esp32: {}, mqtt: {} });
+      setFormErrors({ esp32: {}, mqtt: {}, theme: {} });
     }
-  }, [isOpen, config]);
+  }, [isOpen, loading]); // Only depend on modal open state and loading
+  
+  // Separate effect to update form state when config loads initially
+  useEffect(() => {
+    if (!loading && config && formState.esp32.host === '' && formState.mqtt.host === '' && formState.theme === 'system') {
+      // Only update if form is in initial empty state and config has loaded
+      setFormState({
+        esp32: {
+          host: config.esp32.host,
+          port: config.esp32.host ? config.esp32.port.toString() : ''
+        },
+        mqtt: {
+          host: config.mqtt.host,
+          port: config.mqtt.host ? config.mqtt.port.toString() : '',
+          username: config.mqtt.username || '',
+          password: config.mqtt.password || '',
+          ssl: config.mqtt.ssl
+        },
+        theme: config.theme
+      });
+    }
+  }, [loading, config, formState.esp32.host, formState.mqtt.host, formState.theme]);
 
   // Connection test states
   const [testingConnection, setTestingConnection] = useState<{
@@ -101,26 +133,34 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose }) => {
   const validateForm = (): FormErrors => {
     const errors: FormErrors = { esp32: {}, mqtt: {} };
 
-    // Validate ESP32 configuration using ValidationService
-    const esp32Config = {
-      host: formState.esp32.host.trim(),
-      port: parseInt(formState.esp32.port.trim()) || 0,
-      reachabilityStatus: 'unknown' as const
-    };
+    console.log('[ConfigModal] validateForm called with state:', formState);
 
-    const esp32ValidationResult = validationService.validateESP32Config(esp32Config);
-    if (!esp32ValidationResult.isValid) {
-      // Map validation errors to form errors
-      esp32ValidationResult.errors.forEach((error: ValidationError) => {
-        if (error.field === 'host') {
-          errors.esp32.host = error.message;
-        } else if (error.field === 'port') {
-          errors.esp32.port = error.message;
-        }
-      });
+    // Validate ESP32 configuration ONLY if host is provided
+    if (formState.esp32.host.trim()) {
+      const esp32Config = {
+        host: formState.esp32.host.trim(),
+        port: parseInt(formState.esp32.port.trim()) || 0,
+        reachabilityStatus: 'unknown' as const
+      };
+
+      const esp32ValidationResult = validationService.validateESP32Config(esp32Config);
+      if (!esp32ValidationResult.isValid) {
+        // Map validation errors to form errors
+        esp32ValidationResult.errors.forEach((error: ValidationError) => {
+          if (error.field === 'host') {
+            errors.esp32.host = error.message;
+          } else if (error.field === 'port') {
+            errors.esp32.port = error.message;
+          }
+        });
+      }
+    } else if (formState.esp32.port.trim() && !formState.esp32.host.trim()) {
+      // Special case: port provided without host
+      console.log('[ConfigModal] ESP32 port without host error:', formState.esp32.port);
+      errors.esp32.host = 'Host is required when port is specified';
     }
 
-    // Validate MQTT configuration using ValidationService (only if host provided)
+    // Validate MQTT configuration ONLY if host is provided
     if (formState.mqtt.host.trim()) {
       const mqttConfig = {
         host: formState.mqtt.host.trim(),
@@ -148,6 +188,7 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose }) => {
       }
     } else if (formState.mqtt.port.trim() && !formState.mqtt.host.trim()) {
       // Special case: port provided without host
+      console.log('[ConfigModal] MQTT port without host error:', formState.mqtt.port);
       errors.mqtt.host = 'Host is required when port is specified';
     }
 
@@ -155,17 +196,26 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose }) => {
   };
 
   // Handle input changes
-  const handleInputChange = (section: keyof FormState, field: string, value: string | boolean) => {
-    setFormState(prev => ({
-      ...prev,
-      [section]: {
-        ...prev[section],
-        [field]: value
-      }
-    }));
+  const handleInputChange = (section: keyof FormState, field: string, value: string | boolean | ThemeMode) => {
+    if (section === 'theme') {
+      // Handle theme changes directly
+      setFormState(prev => ({
+        ...prev,
+        theme: value as ThemeMode
+      }));
+    } else {
+      // Handle nested object changes for esp32 and mqtt
+      setFormState(prev => ({
+        ...prev,
+        [section]: {
+          ...prev[section],
+          [field]: value
+        }
+      }));
+    }
 
     // Clear error for this field when user starts typing
-    if (typeof value === 'string') {
+    if (typeof value === 'string' && section !== 'theme') {
       setFormErrors(prev => ({
         ...prev,
         [section]: {
@@ -175,8 +225,10 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose }) => {
       }));
     }
     
-    // Clear connection test results when form changes
-    setConnectionResults({});
+    // Clear connection test results when form changes (not for theme)
+    if (section !== 'theme') {
+      setConnectionResults({});
+    }
   };
 
   // Handle connection testing
@@ -269,64 +321,49 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose }) => {
     }
   };
 
-  // Handle form submission
+  // Handle form submission - UNIFIED CONFIG SAVE
   const handleSave = async () => {
-    const errors = validateForm();
-    
-    // Check if there are any errors
-    const hasESP32Errors = Object.values(errors.esp32).some(error => error !== undefined);
-    const hasMQTTErrors = Object.values(errors.mqtt).some(error => error !== undefined);
-    
-    if (hasESP32Errors || hasMQTTErrors) {
-      setFormErrors(errors);
-      return;
-    }
+    console.log('[ConfigModal] Save button clicked - UNIFIED SAVE APPROACH');
+    console.log('[ConfigModal] Form state:', formState);
 
     setIsSaving(true);
     
     try {
-      // Update ESP32 configuration
-      await updateESP32Config({
-        host: formState.esp32.host.trim(),
-        port: parseInt(formState.esp32.port.trim(), 10)
-      });
-
-      // Update MQTT configuration (only if host is provided)
-      if (formState.mqtt.host.trim()) {
-        await updateMQTTConfig({
+      // Create unified config update from form state
+      const configUpdate: Partial<AppConfig> = {
+        theme: formState.theme,
+        esp32: formState.esp32.host.trim() ? {
+          host: formState.esp32.host.trim(),
+          port: parseInt(formState.esp32.port.trim(), 10) || 80,
+          reachabilityStatus: config.esp32.reachabilityStatus // Preserve current status
+        } : config.esp32, // Keep existing ESP32 config if no host provided
+        mqtt: formState.mqtt.host.trim() ? {
           host: formState.mqtt.host.trim(),
-          port: parseInt(formState.mqtt.port.trim(), 10),
+          port: parseInt(formState.mqtt.port.trim(), 10) || 1883,
           username: formState.mqtt.username.trim() || undefined,
           password: formState.mqtt.password.trim() || undefined,
-          ssl: formState.mqtt.ssl
-        });
-      }
+          ssl: formState.mqtt.ssl,
+          reachabilityStatus: config.mqtt.reachabilityStatus // Preserve current status
+        } : config.mqtt // Keep existing MQTT config if no host provided
+      };
 
-      console.log('Configuration saved successfully');
-      onClose();
-    } catch (error) {
-      console.error('Failed to save configuration:', error);
+      console.log('[ConfigModal] Unified config update:', configUpdate);
       
-      // Handle validation errors from the config manager
-      if (error instanceof Error) {
-        if (error.message.includes('ESP32 configuration invalid')) {
-          setFormErrors(prev => ({
-            ...prev,
-            esp32: {
-              ...prev.esp32,
-              host: 'ESP32 configuration validation failed. Please check your settings.'
-            }
-          }));
-        } else if (error.message.includes('MQTT configuration invalid')) {
-          setFormErrors(prev => ({
-            ...prev,
-            mqtt: {
-              ...prev.mqtt,
-              host: 'MQTT configuration validation failed. Please check your settings.'
-            }
-          }));
-        }
+      // Save all changes atomically
+      const validationResult = await validateAndSave(configUpdate);
+      
+      if (validationResult.isValid) {
+        console.log('[ConfigModal] Configuration saved successfully');
+        onClose();
+      } else {
+        console.warn('[ConfigModal] Configuration validation warnings:', validationResult.errors);
+        // Still close modal even with warnings - validation service handles this gracefully
+        onClose();
       }
+    } catch (error) {
+      console.error('[ConfigModal] Failed to save configuration:', error);
+      // Still close modal to avoid getting stuck
+      onClose();
     } finally {
       setIsSaving(false);
     }
@@ -346,9 +383,10 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose }) => {
         username: config.mqtt.username || '',
         password: config.mqtt.password || '',
         ssl: config.mqtt.ssl
-      }
+      },
+      theme: config.theme
     });
-    setFormErrors({ esp32: {}, mqtt: {} });
+    setFormErrors({ esp32: {}, mqtt: {}, theme: {} });
     setConnectionResults({});
     setActiveTab('esp32');
     onClose();
@@ -404,6 +442,13 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose }) => {
             >
               MQTT Settings
             </button>
+            <button 
+              className={`tab-button ${activeTab === 'theme' ? 'active' : ''}`}
+              onClick={() => setActiveTab('theme')}
+              disabled={isSaving}
+            >
+              Theme
+            </button>
           </div>
 
           {/* ESP32 Configuration Tab */}
@@ -423,37 +468,31 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose }) => {
               </div>
               
               <div className="form-group">
-                <label htmlFor="esp32-host">Host *</label>
+                <label htmlFor="esp32-host">Host</label>
                 <input
                   id="esp32-host"
                   type="text"
                   value={formState.esp32.host}
                   onChange={(e) => handleInputChange('esp32', 'host', e.target.value)}
                   placeholder="192.168.1.100 or esp32.local"
-                  className={formErrors.esp32.host ? 'error' : ''}
                   disabled={isSaving || loading}
+                  className={formErrors.esp32.host ? 'error' : ''}
                 />
-                {formErrors.esp32.host && (
-                  <span className="error-message">{formErrors.esp32.host}</span>
-                )}
+                {formErrors.esp32.host && <span className="error-message">{formErrors.esp32.host}</span>}
               </div>
               
               <div className="form-group">
-                <label htmlFor="esp32-port">Port *</label>
+                <label htmlFor="esp32-port">Port</label>
                 <input
                   id="esp32-port"
-                  type="number"
+                  type="text"
                   value={formState.esp32.port}
                   onChange={(e) => handleInputChange('esp32', 'port', e.target.value)}
                   placeholder="80"
-                  min="1"
-                  max="65535"
-                  className={formErrors.esp32.port ? 'error' : ''}
                   disabled={isSaving || loading}
+                  className={formErrors.esp32.port ? 'error' : ''}
                 />
-                {formErrors.esp32.port && (
-                  <span className="error-message">{formErrors.esp32.port}</span>
-                )}
+                {formErrors.esp32.port && <span className="error-message">{formErrors.esp32.port}</span>}
               </div>
 
               {/* ESP32 Connection Test */}
@@ -514,30 +553,24 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose }) => {
                   value={formState.mqtt.host}
                   onChange={(e) => handleInputChange('mqtt', 'host', e.target.value)}
                   placeholder="broker.example.com or 192.168.1.50"
-                  className={formErrors.mqtt.host ? 'error' : ''}
                   disabled={isSaving || loading}
+                  className={formErrors.mqtt.host ? 'error' : ''}
                 />
-                {formErrors.mqtt.host && (
-                  <span className="error-message">{formErrors.mqtt.host}</span>
-                )}
+                {formErrors.mqtt.host && <span className="error-message">{formErrors.mqtt.host}</span>}
               </div>
               
               <div className="form-group">
                 <label htmlFor="mqtt-port">Port</label>
                 <input
                   id="mqtt-port"
-                  type="number"
+                  type="text"
                   value={formState.mqtt.port}
                   onChange={(e) => handleInputChange('mqtt', 'port', e.target.value)}
                   placeholder="1883 (default) or 8883 (SSL)"
-                  min="1"
-                  max="65535"
-                  className={formErrors.mqtt.port ? 'error' : ''}
                   disabled={isSaving || loading}
+                  className={formErrors.mqtt.port ? 'error' : ''}
                 />
-                {formErrors.mqtt.port && (
-                  <span className="error-message">{formErrors.mqtt.port}</span>
-                )}
+                {formErrors.mqtt.port && <span className="error-message">{formErrors.mqtt.port}</span>}
               </div>
 
               <div className="form-group">
@@ -549,10 +582,9 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose }) => {
                   onChange={(e) => handleInputChange('mqtt', 'username', e.target.value)}
                   placeholder="Optional - leave empty for anonymous"
                   disabled={isSaving || loading}
+                  className={formErrors.mqtt.username ? 'error' : ''}
                 />
-                {formErrors.mqtt.username && (
-                  <span className="error-message">{formErrors.mqtt.username}</span>
-                )}
+                {formErrors.mqtt.username && <span className="error-message">{formErrors.mqtt.username}</span>}
               </div>
 
               <div className="form-group">
@@ -564,10 +596,9 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose }) => {
                   onChange={(e) => handleInputChange('mqtt', 'password', e.target.value)}
                   placeholder="Optional - leave empty for anonymous"
                   disabled={isSaving || loading}
+                  className={formErrors.mqtt.password ? 'error' : ''}
                 />
-                {formErrors.mqtt.password && (
-                  <span className="error-message">{formErrors.mqtt.password}</span>
-                )}
+                {formErrors.mqtt.password && <span className="error-message">{formErrors.mqtt.password}</span>}
               </div>
 
               <div className="form-group checkbox-group">
@@ -618,6 +649,80 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose }) => {
               </div>
             </div>
           )}
+
+          {/* Theme Configuration Tab */}
+          {activeTab === 'theme' && (
+            <div className="config-section">
+              <div className="section-header">
+                <h3>Theme Settings</h3>
+                <div className="theme-description">
+                  <span className="theme-help-text">
+                    Choose your preferred appearance theme
+                  </span>
+                </div>
+              </div>
+              
+              <div className="form-group radio-group">
+                <fieldset>
+                  <legend>Theme Mode</legend>
+                  
+                  <label className="radio-label">
+                    <input
+                      type="radio"
+                      name="theme"
+                      value="bright"
+                      checked={formState.theme === 'bright'}
+                      onChange={(e) => handleInputChange('theme', 'theme', e.target.value as ThemeMode)}
+                      disabled={isSaving || loading}
+                    />
+                    <span className="radio-text">
+                      <strong>Bright</strong>
+                      <span className="radio-description">Light theme with bright colors</span>
+                    </span>
+                  </label>
+                  
+                  <label className="radio-label">
+                    <input
+                      type="radio"
+                      name="theme"
+                      value="dark"
+                      checked={formState.theme === 'dark'}
+                      onChange={(e) => handleInputChange('theme', 'theme', e.target.value as ThemeMode)}
+                      disabled={isSaving || loading}
+                    />
+                    <span className="radio-text">
+                      <strong>Dark</strong>
+                      <span className="radio-description">Dark theme with muted colors</span>
+                    </span>
+                  </label>
+                  
+                  <label className="radio-label">
+                    <input
+                      type="radio"
+                      name="theme"
+                      value="system"
+                      checked={formState.theme === 'system'}
+                      onChange={(e) => handleInputChange('theme', 'theme', e.target.value as ThemeMode)}
+                      disabled={isSaving || loading}
+                    />
+                    <span className="radio-text">
+                      <strong>System</strong>
+                      <span className="radio-description">Follow your device's theme setting</span>
+                    </span>
+                  </label>
+                </fieldset>
+              </div>
+              
+              <div className="theme-preview">
+                <span className="preview-label">Current theme: </span>
+                <span className="preview-value">
+                  {formState.theme === 'bright' && 'Bright Mode'}
+                  {formState.theme === 'dark' && 'Dark Mode'}
+                  {formState.theme === 'system' && 'System Setting'}
+                </span>
+              </div>
+            </div>
+          )}
         </div>
         
         <div className="modal-footer">
@@ -630,7 +735,12 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose }) => {
           </button>
           <button 
             className="btn-primary" 
-            onClick={handleSave}
+            onClick={(e) => {
+              console.log('[ConfigModal] Save button clicked - event triggered');
+              console.log('[ConfigModal] Button state - isSaving:', isSaving, 'loading:', loading);
+              e.preventDefault();
+              handleSave();
+            }}
             disabled={isSaving || loading}
           >
             {isSaving ? 'Saving...' : 'Save'}

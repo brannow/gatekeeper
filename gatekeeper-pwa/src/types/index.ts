@@ -63,6 +63,12 @@ export type PWAInstallStatus = 'unknown' | 'installable' | 'installed' | 'not_su
 export type OfflineStatus = 'online' | 'offline' | 'checking';
 
 /**
+ * Theme mode options for UI styling
+ * Supports manual bright/dark modes and system preference
+ */
+export type ThemeMode = 'bright' | 'dark' | 'system';
+
+/**
  * Offline queue item types
  */
 export type OfflineQueueItemType = 'gate_trigger' | 'config_update' | 'reachability_check';
@@ -126,6 +132,7 @@ export interface MQTTConfig {
 export interface AppConfig {
   esp32: ESP32Config;
   mqtt: MQTTConfig;
+  theme: ThemeMode;
   version: string;
   lastModified: number;
 }
@@ -145,7 +152,7 @@ export interface ValidationResult {
  * Describes specific validation failures
  */
 export interface ValidationError {
-  field: keyof ESP32Config | keyof MQTTConfig;
+  field: keyof ESP32Config | keyof MQTTConfig | 'theme';
   message: string;
   code: 'required' | 'format' | 'range' | 'length';
 }
@@ -190,6 +197,7 @@ export interface ConfigManagerInterface {
   saveConfig(config: AppConfig): Promise<void>;
   validateESP32Config(config: Partial<ESP32Config>): ValidationResult;
   validateMQTTConfig(config: Partial<MQTTConfig>): ValidationResult;
+  validateThemeConfig(theme: ThemeMode): ValidationResult;
   validateFullConfig(config: Partial<AppConfig>): ValidationResult;
   exportConfig(): Promise<string>;
   importConfig(configJson: string): Promise<AppConfig>;
@@ -204,8 +212,6 @@ export interface ConfigHookInterface {
   config: AppConfig;
   loading: boolean;
   error: string | null;
-  updateESP32Config: (config: Partial<ESP32Config>) => Promise<void>;
-  updateMQTTConfig: (config: Partial<MQTTConfig>) => Promise<void>;
   validateAndSave: (config: Partial<AppConfig>) => Promise<ValidationResult>;
   updateReachabilityStatus: (type: 'esp32' | 'mqtt', status: ReachabilityStatus) => Promise<void>;
   reset: () => Promise<void>;
@@ -290,11 +296,6 @@ export interface ExtendedConfigManagerInterface extends ConfigManagerInterface {
    */
   clearState(): Promise<void>;
   
-  /**
-   * Check if all configurations are unreachable
-   * Used for noNetwork state logic
-   */
-  areAllConfigsUnreachable(): boolean;
 }
 
 /**

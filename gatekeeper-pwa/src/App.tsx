@@ -3,11 +3,25 @@ import TriggerButton from './components/TriggerButton';
 import ConfigButton from './components/ConfigButton';
 import ConfigModal from './components/ConfigModal';
 import InstallPrompt from './components/InstallPrompt';
+import { useTheme } from './hooks/useTheme';
 import './App.css';
 
 function App() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isInstallPromptOpen, setIsInstallPromptOpen] = useState(false);
+
+  // Initialize theme management
+  const { 
+    themeMode, 
+    resolvedTheme, 
+    loading: themeLoading, 
+    error: themeError 
+  } = useTheme({
+    enableLogging: import.meta.env.DEV,
+    onThemeChange: (theme, resolved) => {
+      console.log(`[App] Theme changed: ${theme} (resolved: ${resolved})`);
+    }
+  });
 
   const openModal = useCallback(() => setIsModalOpen(true), []);
   const closeModal = useCallback(() => setIsModalOpen(false), []);
@@ -35,14 +49,49 @@ function App() {
   }, [openModal]);
 
 
+  // Show loading state while theme is initializing
+  if (themeLoading) {
+    return (
+      <div className="container" data-theme-loading="true">
+        <div className="main-content">
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center',
+            fontSize: '16px',
+            color: 'var(--text-secondary)'
+          }}>
+            Initializing theme...
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="container">
+    <div 
+      className="container" 
+      data-theme-mode={themeMode}
+      data-resolved-theme={resolvedTheme}
+    >
       <div className="main-content">
         <TriggerButton />
-        
-        {/* Floating Configuration Button */}
-        <ConfigButton onClick={openModal} onInstallPrompt={openInstallPrompt} />
       </div>
+      
+      {/* Floating Configuration Button - Outside main-content to avoid flex interference */}
+      <ConfigButton onClick={openModal} onInstallPrompt={openInstallPrompt} />
+      
+      {/* Theme error display */}
+      {themeError && (
+        <div className="error-message" style={{ 
+          position: 'fixed', 
+          top: '20px', 
+          left: '20px', 
+          zIndex: 1100 
+        }}>
+          Theme Error: {themeError}
+        </div>
+      )}
       
       {isModalOpen && (
         <ConfigModal

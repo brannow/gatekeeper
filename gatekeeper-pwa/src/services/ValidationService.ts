@@ -3,7 +3,8 @@ import type {
   MQTTConfig, 
   AppConfig, 
   ValidationResult, 
-  ValidationError 
+  ValidationError,
+  ThemeMode 
 } from '../types';
 import type { StateMachineConfig } from '../types/state-machine';
 import { 
@@ -29,14 +30,8 @@ export class ValidationService {
     const errors: ValidationError[] = [];
     const warnings: string[] = [];
 
-    // Validate host (required)
-    if (!config.host || config.host.trim() === '') {
-      errors.push({
-        field: 'host',
-        message: 'ESP32 host is required',
-        code: 'required'
-      });
-    } else {
+    // Validate host (optional for saving, but if provided must be valid)
+    if (config.host && config.host.trim() !== '') {
       const trimmedHost = config.host.trim();
       if (!isValidHost(trimmedHost)) {
         errors.push({
@@ -45,26 +40,38 @@ export class ValidationService {
           code: 'format'
         });
       }
+    } else {
+      warnings.push('ESP32 host is empty. Configuration will not be active for HTTP.');
     }
 
-    // Validate port (required)
-    if (config.port === undefined || config.port === null) {
-      errors.push({
-        field: 'port',
-        message: 'ESP32 port is required',
-        code: 'required'
-      });
-    } else if (!isValidPort(config.port)) {
-      errors.push({
-        field: 'port',
-        message: getPortValidationError(config.port),
-        code: 'range'
-      });
-    } else {
-      // Warn about non-standard HTTP ports
-      if (!isCommonPort(config.port, 'esp32')) {
-        warnings.push(`Port ${config.port} is not a common HTTP port (80, 8080, 3000, 443)`);
+    // Validate port
+    if (config.host && config.host.trim() !== '') { // Only require port if host is provided
+      if (config.port === undefined || config.port === null) {
+        errors.push({
+          field: 'port',
+          message: 'ESP32 port is required when host is provided',
+          code: 'required'
+        });
+      } else if (!isValidPort(config.port)) {
+        errors.push({
+          field: 'port',
+          message: getPortValidationError(config.port),
+          code: 'range'
+        });
+      } else {
+        // Warn about non-standard HTTP ports
+        if (!isCommonPort(config.port, 'esp32')) {
+          warnings.push(`Port ${config.port} is not a common HTTP port (80, 8080, 3000, 443)`);
+        }
       }
+    } else if (config.port !== undefined && config.port !== null && !isValidPort(config.port)) {
+      // If host is not provided, but an invalid port is, warn about it
+      warnings.push(`ESP32 port is invalid: ${getPortValidationError(config.port)}. Configuration will not be active for HTTP.`);
+    } else if (config.port !== undefined && config.port !== null) {
+      // If host is not provided, but a valid port is, warn about it
+      warnings.push(`ESP32 port is provided without a host. Configuration will not be active for HTTP.`);
+    } else {
+      warnings.push('ESP32 port is empty. Configuration will not be active for HTTP.');
     }
 
     return {
@@ -118,17 +125,54 @@ export class ValidationService {
     }
 
     // Username validation (optional, but if provided must not be empty)
-    if (config.username !== undefined && config.username !== null && config.username.trim() === '') {
-      errors.push({
-        field: 'username',
-        message: 'MQTT username cannot be empty if provided',
-        code: 'length'
-      });
+    if (config.username !== undefined && config.username !== null) {
+      if (config.username.trim() === '') {
+        warnings.push('MQTT username is empty. Authentication may fail.');
+      }
     }
 
     // Password validation (warn if username provided without password)
     if (config.username && config.username.trim() !== '' && (!config.password || config.password.trim() === '')) {
       warnings.push('MQTT username provided without password - this may cause authentication issues');
+    }
+
+    return {
+      isValid: errors.length === 0,
+      errors,
+      warnings: warnings.length > 0 ? warnings : undefined
+    };
+  }
+
+  /**
+   * Validates theme configuration with comprehensive error collection
+   * @param theme Theme mode to validate
+   * @returns ValidationResult with all errors and warnings
+   */
+  validateThemeConfig(theme: ThemeMode): ValidationResult {
+    const errors: ValidationError[] = [];
+    const warnings: string[] = [];
+
+    // Validate theme value
+    if (!theme) {
+      errors.push({
+        field: 'theme',
+        message: 'Theme mode is required',
+        code: 'required'
+      });
+    } else {
+      const validThemes: ThemeMode[] = ['bright', 'dark', 'system'];
+      if (!validThemes.includes(theme)) {
+        errors.push({
+          field: 'theme',
+          message: 'Theme mode must be one of: bright, dark, system',
+          code: 'format'
+        });
+      }
+      
+      // Optional warning about system theme
+      if (theme === 'system') {
+        warnings.push('System theme will follow device dark mode preference - may change automatically');
+      }
     }
 
     return {
@@ -147,19 +191,11 @@ export class ValidationService {
     const errors: ValidationError[] = [];
     const warnings: string[] = [];
 
-    // Validate ESP32 configuration (required)
-    if (config.esp32) {
-      const esp32Result = this.validateESP32Config(config.esp32);
-      errors.push(...esp32Result.errors);
-      if (esp32Result.warnings) {
-        warnings.push(...esp32Result.warnings);
-      }
-    } else {
-      errors.push({
-        field: 'host' as keyof ESP32Config,
-        message: 'ESP32 configuration is required',
-        code: 'required'
-      });
+    // Validate ESP32 configuration
+    const esp32Result = this.validateESP32Config(config.esp32 || {});
+    errors.push(...esp32Result.errors);
+    if (esp32Result.warnings) {
+      warnings.push(...esp32Result.warnings);
     }
 
     // Validate MQTT configuration (optional)
@@ -168,6 +204,15 @@ export class ValidationService {
       errors.push(...mqttResult.errors);
       if (mqttResult.warnings) {
         warnings.push(...mqttResult.warnings);
+      }
+    }
+
+    // Validate theme configuration (optional, but if provided must be valid)
+    if (config.theme !== undefined) {
+      const themeResult = this.validateThemeConfig(config.theme);
+      errors.push(...themeResult.errors);
+      if (themeResult.warnings) {
+        warnings.push(...themeResult.warnings);
       }
     }
 
@@ -381,6 +426,21 @@ export class ValidationService {
    */
   validateMQTTConfigStrict(config: Partial<MQTTConfig>): void {
     const result = this.validateMQTTConfig(config);
+    
+    if (!result.isValid && result.errors.length > 0) {
+      // Throw with the first error message for immediate feedback
+      throw new Error(result.errors[0].message);
+    }
+  }
+
+  /**
+   * Validates theme configuration and throws on first error (fail-fast mode)
+   * Used by services that need immediate error feedback
+   * @param theme Theme configuration to validate
+   * @throws Error with validation message if invalid
+   */
+  validateThemeConfigStrict(theme: ThemeMode): void {
+    const result = this.validateThemeConfig(theme);
     
     if (!result.isValid && result.errors.length > 0) {
       // Throw with the first error message for immediate feedback

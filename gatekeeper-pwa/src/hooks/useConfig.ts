@@ -8,7 +8,8 @@ import type {
   GateState,
   NetworkOperationContext,
   OfflineStatus,
-  PWAInstallStatus
+  PWAInstallStatus,
+  ThemeMode
 } from '../types';
 import type { StateMachineConfig } from '../types/state-machine';
 import { configManager } from '../services/ConfigManager';
@@ -16,6 +17,7 @@ import { configManager } from '../services/ConfigManager';
 /**
  * Enhanced configuration hook interface with state machine support
  * Extends base ConfigHookInterface with state machine configuration methods
+ * Includes integrated theme management from useTheme hook
  */
 export interface EnhancedConfigHookInterface extends ConfigHookInterface {
   // State machine configuration
@@ -37,8 +39,6 @@ export interface EnhancedConfigHookInterface extends ConfigHookInterface {
   exportFullConfig: () => Promise<string>;
   importFullConfig: (configJson: string) => Promise<void>;
   
-  // Configuration analysis
-  areAllConfigsUnreachable: () => boolean;
   
   // PWA support (Phase 4)
   offlineStatus: OfflineStatus;
@@ -54,6 +54,7 @@ export interface EnhancedConfigHookInterface extends ConfigHookInterface {
 /**
  * Custom React hook for configuration state management
  * Phase 3: Enhanced with state machine configuration and error recovery
+ * Task 6: Integrated theme management via useTheme hook
  * Provides reactive configuration state with validation and persistence
  * Follows React hooks patterns for consistent integration
  */
@@ -72,12 +73,14 @@ export function useConfig(): EnhancedConfigHookInterface {
       ssl: false,
       reachabilityStatus: 'unknown'
     },
+    theme: 'system',
     version: '2.0.0',
     lastModified: Date.now()
   });
   
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+
   
   // State machine configuration state
   const [stateMachineConfig, setStateMachineConfig] = useState<StateMachineConfig>({
@@ -107,6 +110,75 @@ export function useConfig(): EnhancedConfigHookInterface {
   const [installStatus, setInstallStatus] = useState<PWAInstallStatus>('unknown');
   const [queueSize, setQueueSize] = useState<number>(0);
   const [canInstall, setCanInstall] = useState<boolean>(false);
+
+  /**
+   * Apply theme to DOM when config theme changes
+   * Simplified theme application with system preference detection
+   */
+  useEffect(() => {
+    // Skip during initial loading
+    if (loading) return;
+    
+    const applyThemeToDOM = (theme: ThemeMode) => {
+      if (typeof document === 'undefined') return;
+
+      const root = document.documentElement;
+      
+      // Determine resolved theme
+      let resolvedTheme: 'bright' | 'dark' = 'bright';
+      
+      if (theme === 'system') {
+        // Detect system preference
+        if (typeof window !== 'undefined' && window.matchMedia) {
+          const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          resolvedTheme = isDark ? 'dark' : 'bright';
+        }
+      } else {
+        resolvedTheme = theme;
+      }
+      
+      // Remove existing theme classes
+      root.classList.remove('theme-bright', 'theme-dark');
+      
+      // Add new theme class
+      root.classList.add(`theme-${resolvedTheme}`);
+      
+      // Set data attribute for CSS custom properties
+      root.setAttribute('data-theme', resolvedTheme);
+      
+      console.log(`[useConfig] Applied theme to DOM: ${theme} (resolved: ${resolvedTheme})`);
+    };
+    
+    const handleSystemPreferenceChange = () => {
+      // Only re-apply if using system theme
+      if (config.theme === 'system') {
+        applyThemeToDOM(config.theme);
+      }
+    };
+    
+    // Apply current theme
+    applyThemeToDOM(config.theme);
+    
+    // Listen for system preference changes
+    if (typeof window !== 'undefined' && window.matchMedia && config.theme === 'system') {
+      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+      
+      if (mediaQuery.addEventListener) {
+        mediaQuery.addEventListener('change', handleSystemPreferenceChange);
+      } else {
+        // Fallback for older browsers
+        mediaQuery.addListener(handleSystemPreferenceChange);
+      }
+      
+      return () => {
+        if (mediaQuery.removeEventListener) {
+          mediaQuery.removeEventListener('change', handleSystemPreferenceChange);
+        } else {
+          mediaQuery.removeListener(handleSystemPreferenceChange);
+        }
+      };
+    }
+  }, [config.theme, loading]);
 
   /**
    * Initialize PWA services
@@ -259,104 +331,6 @@ export function useConfig(): EnhancedConfigHookInterface {
   }, []);
 
   /**
-   * Updates ESP32 configuration with validation and persistence
-   * @param updatedConfig Partial ESP32 configuration to merge
-   */
-  const updateESP32Config = useCallback(async (updatedConfig: Partial<ESP32Config>): Promise<void> => {
-    try {
-      setError(null);
-      
-      // Create updated configuration
-      const newESP32Config: ESP32Config = {
-        ...config.esp32,
-        ...updatedConfig
-      };
-      
-      // Validate ESP32 configuration
-      const validationResult = configManager.validateESP32Config(newESP32Config);
-      
-      if (!validationResult.isValid) {
-        const errorMessages = validationResult.errors.map(e => e.message).join(', ');
-        throw new Error(`ESP32 configuration invalid: ${errorMessages}`);
-      }
-      
-      // Create complete updated configuration
-      const newConfig: AppConfig = {
-        ...config,
-        esp32: newESP32Config,
-        lastModified: Date.now()
-      };
-      
-      // Save and update state
-      await configManager.saveConfig(newConfig);
-      setConfig(newConfig);
-      
-      console.log('[useConfig] ESP32 configuration updated successfully');
-      
-      // Log warnings if any
-      if (validationResult.warnings && validationResult.warnings.length > 0) {
-        validationResult.warnings.forEach(warning => {
-          console.warn(`[useConfig] ESP32 configuration warning: ${warning}`);
-        });
-      }
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to update ESP32 configuration';
-      console.error('[useConfig] Failed to update ESP32 configuration:', err);
-      setError(errorMessage);
-      throw err;
-    }
-  }, [config]);
-
-  /**
-   * Updates MQTT configuration with validation and persistence
-   * @param updatedConfig Partial MQTT configuration to merge
-   */
-  const updateMQTTConfig = useCallback(async (updatedConfig: Partial<MQTTConfig>): Promise<void> => {
-    try {
-      setError(null);
-      
-      // Create updated configuration
-      const newMQTTConfig: MQTTConfig = {
-        ...config.mqtt,
-        ...updatedConfig
-      };
-      
-      // Validate MQTT configuration
-      const validationResult = configManager.validateMQTTConfig(newMQTTConfig);
-      
-      if (!validationResult.isValid) {
-        const errorMessages = validationResult.errors.map(e => e.message).join(', ');
-        throw new Error(`MQTT configuration invalid: ${errorMessages}`);
-      }
-      
-      // Create complete updated configuration
-      const newConfig: AppConfig = {
-        ...config,
-        mqtt: newMQTTConfig,
-        lastModified: Date.now()
-      };
-      
-      // Save and update state
-      await configManager.saveConfig(newConfig);
-      setConfig(newConfig);
-      
-      console.log('[useConfig] MQTT configuration updated successfully');
-      
-      // Log warnings if any
-      if (validationResult.warnings && validationResult.warnings.length > 0) {
-        validationResult.warnings.forEach(warning => {
-          console.warn(`[useConfig] MQTT configuration warning: ${warning}`);
-        });
-      }
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to update MQTT configuration';
-      console.error('[useConfig] Failed to update MQTT configuration:', err);
-      setError(errorMessage);
-      throw err;
-    }
-  }, [config]);
-
-  /**
    * Validates and saves complete configuration
    * @param updatedConfig Partial application configuration to merge and save
    * @returns ValidationResult with detailed validation information
@@ -365,16 +339,19 @@ export function useConfig(): EnhancedConfigHookInterface {
     try {
       setError(null);
       
-      // Create complete updated configuration
+      // Load fresh config to avoid stale closure issues
+      const currentConfig = await configManager.loadConfig();
+      
+      // Create complete updated configuration using fresh config
       const newConfig: AppConfig = {
-        ...config,
+        ...currentConfig,
         ...updatedConfig,
         esp32: {
-          ...config.esp32,
+          ...currentConfig.esp32,
           ...updatedConfig.esp32
         },
         mqtt: {
-          ...config.mqtt,
+          ...currentConfig.mqtt,
           ...updatedConfig.mqtt
         },
         lastModified: Date.now()
@@ -421,7 +398,7 @@ export function useConfig(): EnhancedConfigHookInterface {
         }]
       };
     }
-  }, [config]);
+  }, []); // No dependencies since we load fresh config
 
   /**
    * Resets configuration to defaults
@@ -503,17 +480,20 @@ export function useConfig(): EnhancedConfigHookInterface {
     status: 'reachable' | 'unreachable' | 'unknown'
   ): Promise<void> => {
     try {
+      // Load fresh config to avoid stale closure issues
+      const currentConfig = await configManager.loadConfig();
+      
       const newConfig: AppConfig = {
-        ...config,
+        ...currentConfig,
         [type]: {
-          ...config[type],
+          ...currentConfig[type],
           reachabilityStatus: status
         },
         lastModified: Date.now()
       };
       
-      // Save updated configuration
-      await configManager.saveConfig(newConfig);
+      // Save updated configuration (skip validation for reachability-only updates)
+      await configManager.saveConfig(newConfig, true);
       setConfig(newConfig);
       
       console.log(`[useConfig] ${type.toUpperCase()} reachability status updated to: ${status}`);
@@ -521,7 +501,7 @@ export function useConfig(): EnhancedConfigHookInterface {
       console.error(`[useConfig] Failed to update ${type} reachability status:`, err);
       // Don't throw error for reachability status updates to avoid disrupting the UI
     }
-  }, [config, setConfig]);
+  }, []); // No dependencies since we load fresh config
 
   /**
    * Updates state machine configuration with validation and persistence
@@ -703,14 +683,6 @@ export function useConfig(): EnhancedConfigHookInterface {
     }
   }, []);
 
-  /**
-   * Check if all configurations are unreachable
-   * Used for noNetwork state logic
-   * @returns boolean - true if all configurations are unreachable
-   */
-  const areAllConfigsUnreachable = useCallback((): boolean => {
-    return configManager.areAllConfigsUnreachable();
-  }, []);
 
   /**
    * PWA Methods (Phase 4)
@@ -777,8 +749,6 @@ export function useConfig(): EnhancedConfigHookInterface {
     config,
     loading,
     error,
-    updateESP32Config,
-    updateMQTTConfig,
     validateAndSave,
     updateReachabilityStatus,
     reset,
@@ -802,8 +772,6 @@ export function useConfig(): EnhancedConfigHookInterface {
     exportFullConfig,
     importFullConfig,
     
-    // Configuration analysis interface
-    areAllConfigsUnreachable,
     
     // PWA interface (Phase 4)
     offlineStatus,

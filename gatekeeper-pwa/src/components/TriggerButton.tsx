@@ -18,24 +18,24 @@ const TriggerButton: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="container">
+      <>
         <h1>Gatekeeper</h1>
         <button className="trigger-button loading" disabled>
           LOADING CONFIG...
         </button>
-      </div>
+      </>
     );
   }
 
   if (error) {
     return (
-      <div className="container">
+      <>
         <h1>Gatekeeper</h1>
         <button className="trigger-button error" disabled>
           CONFIG ERROR
         </button>
         <p className="error-message">{error}</p>
-      </div>
+      </>
     );
   }
 
@@ -45,7 +45,7 @@ const TriggerButton: React.FC = () => {
   };
 
   return (
-    <div className="container">
+    <>
       <h1>Gatekeeper</h1>
       <button
         className={`trigger-button ${stateMachine.currentState}`}
@@ -140,7 +140,7 @@ const TriggerButton: React.FC = () => {
           </div>
         </div>
       </div>
-    </div>
+    </>
   );
 };
 

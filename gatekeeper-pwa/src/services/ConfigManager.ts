@@ -5,7 +5,8 @@ import type {
   MQTTConfig, 
   ValidationResult,
   GateState,
-  NetworkOperationContext
+  NetworkOperationContext,
+  ThemeMode
 } from '../types';
 import { 
   DEFAULT_STATE_MACHINE_CONFIG,
@@ -32,17 +33,16 @@ export class ConfigManager implements ExtendedConfigManagerInterface {
   private readonly defaultConfig: AppConfig = {
     esp32: {
       host: '',
-      port: 80,
-      reachabilityStatus: 'unknown'
+      port: 80
     },
     mqtt: {
       host: '',
       port: 1883,
       username: '',
       password: '',
-      ssl: false,
-      reachabilityStatus: 'unknown'
+      ssl: false
     },
+    theme: 'system',
     version: this.configVersion,
     lastModified: Date.now()
   };
@@ -85,13 +85,17 @@ export class ConfigManager implements ExtendedConfigManagerInterface {
    * @param config Complete configuration object to save
    * @returns Promise<void>
    */
-  async saveConfig(config: AppConfig): Promise<void> {
+  async saveConfig(config: AppConfig, skipValidation: boolean = false): Promise<void> {
     try {
-      const validationResult = this.validateFullConfig(config);
+      let validationResult = null;
       
-      if (!validationResult.isValid) {
-        const errorMessages = validationResult.errors.map(e => e.message).join(', ');
-        throw new Error(`Configuration validation failed: ${errorMessages}`);
+      if (!skipValidation) {
+        validationResult = this.validateFullConfig(config);
+        
+        if (!validationResult.isValid) {
+          const errorMessages = validationResult.errors.map(e => e.message).join(', ');
+          console.warn(`[ConfigManager] Configuration validation warnings/errors: ${errorMessages}`);
+        }
       }
 
       const configToSave: AppConfig = {
@@ -106,8 +110,8 @@ export class ConfigManager implements ExtendedConfigManagerInterface {
       console.log('[ConfigManager] Configuration saved successfully');
       
       // Log warnings if any
-      if (validationResult.warnings && validationResult.warnings.length > 0) {
-        validationResult.warnings.forEach(warning => {
+      if (validationResult?.warnings && validationResult.warnings.length > 0) {
+        validationResult.warnings.forEach((warning: any) => {
           console.warn(`[ConfigManager] Configuration warning: ${warning}`);
         });
       }
@@ -133,6 +137,15 @@ export class ConfigManager implements ExtendedConfigManagerInterface {
    */
   validateMQTTConfig(config: Partial<MQTTConfig>): ValidationResult {
     return validationService.validateMQTTConfig(config);
+  }
+
+  /**
+   * Validates theme configuration using centralized validation utilities
+   * @param theme Theme mode to validate
+   * @returns ValidationResult with errors and warnings
+   */
+  validateThemeConfig(theme: ThemeMode): ValidationResult {
+    return validationService.validateThemeConfig(theme);
   }
 
   /**
@@ -177,6 +190,7 @@ export class ConfigManager implements ExtendedConfigManagerInterface {
       const coreConfig: Partial<AppConfig> = {
         esp32: parsedConfig.esp32,
         mqtt: parsedConfig.mqtt,
+        theme: parsedConfig.theme,
         version: parsedConfig.version,
         lastModified: parsedConfig.lastModified
       };
@@ -185,7 +199,7 @@ export class ConfigManager implements ExtendedConfigManagerInterface {
       
       if (!validationResult.isValid) {
         const errorMessages = validationResult.errors.map(e => e.message).join(', ');
-        throw new Error(`Invalid configuration: ${errorMessages}`);
+        console.warn(`[ConfigManager] Imported configuration has validation warnings/errors: ${errorMessages}`);
       }
 
       const importedConfig = this.migrateAndValidateConfig(coreConfig);
@@ -196,8 +210,10 @@ export class ConfigManager implements ExtendedConfigManagerInterface {
     } catch (error) {
       console.error('[ConfigManager] Failed to import configuration:', error);
       if (error instanceof SyntaxError) {
+        console.error('[ConfigManager] Invalid JSON format:', error);
         throw new Error('Invalid JSON format');
       }
+      console.error(`[ConfigManager] Failed to import configuration: ${error instanceof Error ? error.message : 'Unknown error'}`, error);
       throw new Error(`Failed to import configuration: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -262,6 +278,13 @@ export class ConfigManager implements ExtendedConfigManagerInterface {
       localStorage.setItem(this.stateMachineConfigKey, serializedConfig);
       
       console.log('[ConfigManager] State machine configuration saved successfully');
+      
+      // Log validation errors as warnings if any
+      const validationResult = validationService.validateStateMachineConfig(config);
+      if (!validationResult.isValid) {
+        const errorMessages = validationResult.errors.map((e: any) => e.message).join(', ');
+        console.warn(`[ConfigManager] State machine configuration validation warnings/errors: ${errorMessages}`);
+      }
     } catch (error) {
       console.error('[ConfigManager] Failed to save state machine configuration:', error);
       throw new Error(`Failed to save state machine configuration: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -344,31 +367,6 @@ export class ConfigManager implements ExtendedConfigManagerInterface {
     }
   }
 
-  /**
-   * Check if all configurations are unreachable
-   * Used for noNetwork state logic
-   */
-  areAllConfigsUnreachable(): boolean {
-    try {
-      const config = JSON.parse(localStorage.getItem(this.storageKey) || '{}');
-      const esp32Unreachable = config.esp32?.reachabilityStatus === 'unreachable';
-      const mqttUnreachable = config.mqtt?.reachabilityStatus === 'unreachable';
-      
-      // Consider all unreachable if both are explicitly unreachable
-      // or if no valid configuration exists
-      const hasValidESP32 = config.esp32?.host && config.esp32?.port;
-      const hasValidMQTT = config.mqtt?.host && config.mqtt?.port;
-      
-      if (!hasValidESP32 && !hasValidMQTT) {
-        return true; // No valid configurations
-      }
-      
-      return esp32Unreachable && mqttUnreachable;
-    } catch (error) {
-      console.error('[ConfigManager] Failed to check reachability status:', error);
-      return true; // Assume unreachable on error
-    }
-  }
 
   /**
    * Export complete configuration including state machine settings
@@ -406,6 +404,7 @@ export class ConfigManager implements ExtendedConfigManagerInterface {
       const coreConfig: Partial<AppConfig> = {
         esp32: parsedConfig.esp32,
         mqtt: parsedConfig.mqtt,
+        theme: parsedConfig.theme,
         version: parsedConfig.version,
         lastModified: parsedConfig.lastModified
       };
@@ -414,7 +413,7 @@ export class ConfigManager implements ExtendedConfigManagerInterface {
       
       if (!validationResult.isValid) {
         const errorMessages = validationResult.errors.map(e => e.message).join(', ');
-        throw new Error(`Invalid configuration: ${errorMessages}`);
+        console.warn(`[ConfigManager] Imported full configuration has validation warnings/errors: ${errorMessages}`);
       }
 
       const importedConfig = this.migrateAndValidateConfig(coreConfig);
@@ -436,9 +435,11 @@ export class ConfigManager implements ExtendedConfigManagerInterface {
     } catch (error) {
       console.error('[ConfigManager] Failed to import full configuration:', error);
       if (error instanceof SyntaxError) {
+        console.error('[ConfigManager] Invalid JSON format:', error);
         throw new Error('Invalid JSON format');
       }
-      throw new Error(`Failed to import configuration: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error(`[ConfigManager] Failed to import full configuration: ${error instanceof Error ? error.message : 'Unknown error'}`, error);
+      throw new Error(`Failed to import full configuration: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
@@ -472,6 +473,7 @@ export class ConfigManager implements ExtendedConfigManagerInterface {
         ...this.defaultConfig.mqtt,
         ...migratedConfig.mqtt
       },
+      theme: migratedConfig.theme || this.defaultConfig.theme,
       version: this.configVersion,
       lastModified: migratedConfig.lastModified || Date.now()
     };
@@ -546,6 +548,56 @@ export class ConfigManager implements ExtendedConfigManagerInterface {
     }
     
     return result;
+  }
+
+  /**
+   * Get current theme configuration
+   * @returns Promise<ThemeMode> - Current theme setting
+   */
+  async getTheme(): Promise<ThemeMode> {
+    try {
+      const config = await this.loadConfig();
+      return config.theme;
+    } catch (error) {
+      console.error('[ConfigManager] Failed to get theme:', error);
+      return this.defaultConfig.theme;
+    }
+  }
+
+  /**
+   * Set theme configuration
+   * @param theme Theme mode to set
+   * @returns Promise<void>
+   */
+  async setTheme(theme: ThemeMode): Promise<void> {
+    try {
+      const validationResult = this.validateThemeConfig(theme);
+      
+      if (!validationResult.isValid) {
+        const errorMessages = validationResult.errors.map(e => e.message).join(', ');
+        console.warn(`[ConfigManager] Theme validation warnings/errors: ${errorMessages}`);
+      }
+
+      const config = await this.loadConfig();
+      const updatedConfig = {
+        ...config,
+        theme,
+        lastModified: Date.now()
+      };
+      
+      await this.saveConfig(updatedConfig);
+      console.log(`[ConfigManager] Theme updated to: ${theme}`);
+      
+      // Log warnings if any
+      if (validationResult.warnings && validationResult.warnings.length > 0) {
+        validationResult.warnings.forEach(warning => {
+          console.warn(`[ConfigManager] Theme warning: ${warning}`);
+        });
+      }
+    } catch (error) {
+      console.error('[ConfigManager] Failed to set theme:', error);
+      throw new Error(`Failed to set theme: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 
 }

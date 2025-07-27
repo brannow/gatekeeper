@@ -20,15 +20,6 @@ export interface NetworkError {
 }
 
 /**
- * Callback for adapter status changes
- * Triggered when adapter connectivity status changes
- */
-export type StatusChangeCallback = (
-  adapterType: 'esp32' | 'mqtt', 
-  status: 'reachable' | 'unreachable' | 'unknown'
-) => void;
-
-/**
  * Base interface for all network adapters
  * Implements adapter chain pattern for reliable network communication
  */
@@ -60,12 +51,6 @@ export interface NetworkAdapter {
    * Called when adapter is removed or app shuts down
    */
   cleanup(): Promise<void>;
-  
-  /**
-   * Set callback for real-time status changes
-   * @param callback Function to call when adapter status changes
-   */
-  setStatusChangeCallback?(callback: StatusChangeCallback): void;
 }
 
 /**

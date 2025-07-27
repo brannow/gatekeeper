@@ -234,7 +234,7 @@ export class MqttService {
         this.ws.onmessage = async (event) => {
           try {
             console.log('[MqttService] Raw message received:', event.data);
-            
+
             let arrayBuffer: ArrayBuffer;
             if (event.data instanceof ArrayBuffer) {
               arrayBuffer = event.data;
@@ -244,10 +244,10 @@ export class MqttService {
               console.error('[MqttService] Unexpected message type:', typeof event.data);
               return;
             }
-            
+
             const buffer = new Uint8Array(arrayBuffer);
             console.log('[MqttService] Message bytes:', Array.from(buffer).map(b => `0x${b.toString(16).padStart(2, '0')}`).join(' '));
-            
+
             this.handleMqttMessage(arrayBuffer, resolve);
           } catch (error) {
             console.error('[MqttService] Error processing MQTT message:', error);
@@ -330,9 +330,9 @@ export class MqttService {
     const connectAckFlags = buffer[2]; // Session present flag
     const reasonCode = buffer[3]; // MQTT 5.0 reason code
     const propertiesLength = buffer[4]; // Properties length
-    
+
     console.log(`[MqttService] CONNACK received - flags: ${connectAckFlags}, reason: ${reasonCode}, props: ${propertiesLength}`);
-    
+
     if (reasonCode === 0) {
       console.log('[MqttService] MQTT connection acknowledged');
       connectResolve?.(true);
@@ -349,13 +349,13 @@ export class MqttService {
     if (buffer.length >= 3) {
       const reasonCode = buffer[2];
       console.log(`[MqttService] Broker disconnected with reason code: ${reasonCode}`);
-      
+
       // Reason codes: 0x00 = Normal disconnect, 0x81 = Malformed packet, etc.
       if (reasonCode === 0x81) {
         console.error('[MqttService] Broker rejected packet as malformed');
       }
     }
-    
+
     // Broker initiated disconnect - don't reconnect immediately
     this.isConnected = false;
     this.clearTimers();
@@ -456,7 +456,7 @@ export class MqttService {
     
     // MQTT 5.0 Properties (empty)
     packet[offset++] = 0x00; // Properties length = 0
-    
+
     // Payload - Client ID
     packet[offset++] = (clientIdBytes.length >> 8) & 0xFF;
     packet[offset++] = clientIdBytes.length & 0xFF;
@@ -537,7 +537,7 @@ export class MqttService {
     
     // MQTT 5.0 Properties (empty)
     packet[offset++] = 0x00; // Properties length = 0
-    
+
     // Payload - Topic filter
     packet[offset++] = (topicBytes.length >> 8) & 0xFF;
     packet[offset++] = topicBytes.length & 0xFF;
@@ -546,7 +546,7 @@ export class MqttService {
     packet[offset++] = 0x00; // QoS 0
     
     console.log(`[MqttService] SUBSCRIBE packet bytes:`, Array.from(packet).map(b => `0x${b.toString(16).padStart(2, '0')}`).join(' '));
-    
+
     return packet;
   }
 

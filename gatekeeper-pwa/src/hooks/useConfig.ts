@@ -1,23 +1,46 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import type { 
   AppConfig, 
   ESP32Config, 
   MQTTConfig, 
   ConfigHookInterface, 
   ValidationResult,
+  GateState,
+  NetworkOperationContext,
   OfflineStatus,
   PWAInstallStatus,
   ThemeMode
 } from '../types';
+import type { StateMachineConfig } from '../types/state-machine';
 import { configManager } from '../services/ConfigManager';
 
 /**
- * Simplified configuration hook interface (Phase 1)
- * Focuses on config persistence, validation, and PWA features
- * Removed network service integration for clean separation
+ * Enhanced configuration hook interface with state machine support
+ * Extends base ConfigHookInterface with state machine configuration methods
+ * Includes integrated theme management from useTheme hook
  */
-export interface SimplifiedConfigHookInterface extends ConfigHookInterface {
-  // PWA support
+export interface EnhancedConfigHookInterface extends ConfigHookInterface {
+  // State machine configuration
+  stateMachineConfig: StateMachineConfig;
+  smLoading: boolean;
+  smError: string | null;
+  
+  // State machine configuration methods
+  updateStateMachineConfig: (config: Partial<StateMachineConfig>) => Promise<void>;
+  loadStateMachineConfig: () => Promise<void>;
+  resetStateMachineConfig: () => Promise<void>;
+  
+  // State persistence methods
+  saveCurrentState: (state: GateState, context?: NetworkOperationContext) => Promise<void>;
+  loadSavedState: () => Promise<{state: GateState, context?: NetworkOperationContext} | null>;
+  clearSavedState: () => Promise<void>;
+  
+  // Enhanced export/import with state machine
+  exportFullConfig: () => Promise<string>;
+  importFullConfig: (configJson: string) => Promise<void>;
+  
+  
+  // PWA support (Phase 4)
   offlineStatus: OfflineStatus;
   installStatus: PWAInstallStatus;
   queueSize: number;
@@ -26,18 +49,16 @@ export interface SimplifiedConfigHookInterface extends ConfigHookInterface {
   queueGateTrigger: (config: ESP32Config | MQTTConfig) => Promise<string>;
   processOfflineQueue: () => Promise<void>;
   clearOfflineQueue: () => Promise<void>;
-  
-  // Simple online status for gate control
-  isOnline: boolean;
 }
 
 /**
- * Simplified configuration hook for state management (Phase 1)
- * Focuses on config persistence, validation, and PWA features
- * Removed network service integration for clean separation
+ * Custom React hook for configuration state management
+ * Phase 3: Enhanced with state machine configuration and error recovery
+ * Task 6: Integrated theme management via useTheme hook
  * Provides reactive configuration state with validation and persistence
+ * Follows React hooks patterns for consistent integration
  */
-export function useConfig(): SimplifiedConfigHookInterface {
+export function useConfig(): EnhancedConfigHookInterface {
   const [config, setConfig] = useState<AppConfig>({
     esp32: {
       host: '',
@@ -60,6 +81,29 @@ export function useConfig(): SimplifiedConfigHookInterface {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
+  
+  // State machine configuration state
+  const [stateMachineConfig, setStateMachineConfig] = useState<StateMachineConfig>({
+    timeouts: {
+      checkingNetwork: 10000,
+      triggering: 5000,
+      waitingForRelayClose: 15000,
+      errorRecovery: 3000
+    },
+    retry: {
+      maxAttempts: 3,
+      backoffMultiplier: 2,
+      baseDelay: 1000
+    },
+    reachability: {
+      initialDelay: 1000,
+      checkInterval: 30000,
+      timeoutPerCheck: 3000
+    }
+  });
+  
+  const [smLoading, setSmLoading] = useState<boolean>(false);
+  const [smError, setSmError] = useState<string | null>(null);
   
   // PWA state (Phase 4)
   const [offlineStatus, setOfflineStatus] = useState<OfflineStatus>('checking');
@@ -236,15 +280,21 @@ export function useConfig(): SimplifiedConfigHookInterface {
     const loadInitialConfig = async () => {
       try {
         setLoading(true);
+        setSmLoading(true);
         setError(null);
+        setSmError(null);
         
         console.log('[useConfig] Loading initial configuration');
         
         // Load main configuration
         const loadedConfig = await configManager.loadConfig();
         
+        // Load state machine configuration
+        const loadedStateMachineConfig = await configManager.loadStateMachineConfig();
+        
         if (mounted) {
           setConfig(loadedConfig);
+          setStateMachineConfig(loadedStateMachineConfig);
           console.log('[useConfig] Configuration loaded successfully');
         }
       } catch (err) {
@@ -256,7 +306,9 @@ export function useConfig(): SimplifiedConfigHookInterface {
           // Use defaults if loading fails
           try {
             const defaultConfig = await configManager.resetToDefaults();
+            const defaultStateMachineConfig = await configManager.loadStateMachineConfig();
             setConfig(defaultConfig);
+            setStateMachineConfig(defaultStateMachineConfig);
             console.log('[useConfig] Fallback to default configuration');
           } catch (resetErr) {
             console.error('[useConfig] Failed to reset to defaults:', resetErr);
@@ -265,6 +317,7 @@ export function useConfig(): SimplifiedConfigHookInterface {
       } finally {
         if (mounted) {
           setLoading(false);
+          setSmLoading(false);
         }
       }
     };
@@ -450,7 +503,185 @@ export function useConfig(): SimplifiedConfigHookInterface {
     }
   }, []); // No dependencies since we load fresh config
 
+  /**
+   * Updates state machine configuration with validation and persistence
+   * @param updatedConfig Partial state machine configuration to merge
+   */
+  const updateStateMachineConfig = useCallback(async (updatedConfig: Partial<StateMachineConfig>): Promise<void> => {
+    try {
+      setSmError(null);
+      
+      // Create updated configuration
+      const newStateMachineConfig: StateMachineConfig = {
+        timeouts: {
+          ...stateMachineConfig.timeouts,
+          ...updatedConfig.timeouts
+        },
+        retry: {
+          ...stateMachineConfig.retry,
+          ...updatedConfig.retry
+        },
+        reachability: {
+          ...stateMachineConfig.reachability,
+          ...updatedConfig.reachability
+        }
+      };
+      
+      // Save and update state
+      await configManager.saveStateMachineConfig(newStateMachineConfig);
+      setStateMachineConfig(newStateMachineConfig);
+      
+      console.log('[useConfig] State machine configuration updated successfully');
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to update state machine configuration';
+      console.error('[useConfig] Failed to update state machine configuration:', err);
+      setSmError(errorMessage);
+      throw err;
+    }
+  }, [stateMachineConfig]);
 
+  /**
+   * Loads state machine configuration from storage
+   */
+  const loadStateMachineConfig = useCallback(async (): Promise<void> => {
+    try {
+      setSmLoading(true);
+      setSmError(null);
+      
+      console.log('[useConfig] Loading state machine configuration');
+      const loadedConfig = await configManager.loadStateMachineConfig();
+      
+      setStateMachineConfig(loadedConfig);
+      console.log('[useConfig] State machine configuration loaded successfully');
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load state machine configuration';
+      console.error('[useConfig] Failed to load state machine configuration:', err);
+      setSmError(errorMessage);
+      throw err;
+    } finally {
+      setSmLoading(false);
+    }
+  }, []);
+
+  /**
+   * Resets state machine configuration to defaults
+   */
+  const resetStateMachineConfig = useCallback(async (): Promise<void> => {
+    try {
+      setSmLoading(true);
+      setSmError(null);
+      
+      console.log('[useConfig] Resetting state machine configuration to defaults');
+      const defaultConfig = await configManager.loadStateMachineConfig();
+      await configManager.saveStateMachineConfig(defaultConfig);
+      
+      setStateMachineConfig(defaultConfig);
+      console.log('[useConfig] State machine configuration reset successfully');
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to reset state machine configuration';
+      console.error('[useConfig] Failed to reset state machine configuration:', err);
+      setSmError(errorMessage);
+      throw err;
+    } finally {
+      setSmLoading(false);
+    }
+  }, []);
+
+  /**
+   * Save current gate state for recovery
+   * @param state Current gate state
+   * @param context Optional operation context
+   */
+  const saveCurrentState = useCallback(async (state: GateState, context?: NetworkOperationContext): Promise<void> => {
+    try {
+      await configManager.saveState(state, context);
+      console.log(`[useConfig] Current state saved: ${state}`);
+    } catch (err) {
+      console.error('[useConfig] Failed to save current state:', err);
+      // Don't throw error for state saving to avoid disrupting operation
+    }
+  }, []);
+
+  /**
+   * Load last saved state for recovery
+   * @returns Promise<{state: GateState, context?: NetworkOperationContext} | null>
+   */
+  const loadSavedState = useCallback(async (): Promise<{state: GateState, context?: NetworkOperationContext} | null> => {
+    try {
+      const savedState = await configManager.loadState();
+      console.log('[useConfig] Saved state loaded:', savedState?.state || 'none');
+      return savedState;
+    } catch (err) {
+      console.error('[useConfig] Failed to load saved state:', err);
+      return null;
+    }
+  }, []);
+
+  /**
+   * Clear saved state
+   */
+  const clearSavedState = useCallback(async (): Promise<void> => {
+    try {
+      await configManager.clearState();
+      console.log('[useConfig] Saved state cleared');
+    } catch (err) {
+      console.error('[useConfig] Failed to clear saved state:', err);
+      // Don't throw error for state clearing
+    }
+  }, []);
+
+  /**
+   * Export complete configuration including state machine settings
+   * @returns Promise<string> - Serialized configuration with all settings
+   */
+  const exportFullConfig = useCallback(async (): Promise<string> => {
+    try {
+      setError(null);
+      setSmError(null);
+      
+      console.log('[useConfig] Exporting full configuration');
+      const exportedConfig = await configManager.exportFullConfig();
+      
+      console.log('[useConfig] Full configuration exported successfully');
+      return exportedConfig;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to export full configuration';
+      console.error('[useConfig] Failed to export full configuration:', err);
+      setError(errorMessage);
+      throw err;
+    }
+  }, []);
+
+  /**
+   * Import complete configuration including state machine settings
+   * @param configJson JSON string containing complete configuration data
+   */
+  const importFullConfig = useCallback(async (configJson: string): Promise<void> => {
+    try {
+      setLoading(true);
+      setSmLoading(true);
+      setError(null);
+      setSmError(null);
+      
+      console.log('[useConfig] Importing full configuration');
+      const importedConfig = await configManager.importFullConfig(configJson);
+      
+      // Reload both configurations
+      const reloadedStateMachineConfig = await configManager.loadStateMachineConfig();
+      
+      setConfig(importedConfig);
+      setStateMachineConfig(reloadedStateMachineConfig);
+      console.log('[useConfig] Full configuration imported successfully');
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to import full configuration';
+      console.error('[useConfig] Failed to import full configuration:', err);
+      setError(errorMessage);
+      throw err;
+    } finally {
+      setLoading(false);
+      setSmLoading(false);
+    }
+  }, []);
 
 
   /**
@@ -512,22 +743,7 @@ export function useConfig(): SimplifiedConfigHookInterface {
     }
   }, []);
 
-  /**
-   * Compute simple online/offline status based on adapter reachability
-   * Returns true if at least one adapter is reachable
-   */
-  const isOnline = useMemo(() => {
-    if (!config) return false;
-    
-    const esp32Reachable = config.esp32.reachabilityStatus === 'reachable';
-    const mqttReachable = Boolean(config.mqtt.host && config.mqtt.reachabilityStatus === 'reachable');
-    
-    const online = esp32Reachable || mqttReachable;
-    
-    return online;
-  }, [config?.esp32.reachabilityStatus, config?.mqtt.reachabilityStatus, config?.mqtt.host]);
-
-  // Return simplified hook interface with config, validation, and PWA features
+  // Return enhanced hook interface with all state and methods
   return {
     // Base configuration interface
     config,
@@ -539,7 +755,25 @@ export function useConfig(): SimplifiedConfigHookInterface {
     export: exportConfig,
     import: importConfig,
     
-    // PWA interface
+    // State machine configuration interface
+    stateMachineConfig,
+    smLoading,
+    smError,
+    updateStateMachineConfig,
+    loadStateMachineConfig,
+    resetStateMachineConfig,
+    
+    // State persistence interface
+    saveCurrentState,
+    loadSavedState,
+    clearSavedState,
+    
+    // Enhanced export/import interface
+    exportFullConfig,
+    importFullConfig,
+    
+    
+    // PWA interface (Phase 4)
     offlineStatus,
     installStatus,
     queueSize,
@@ -547,9 +781,6 @@ export function useConfig(): SimplifiedConfigHookInterface {
     showInstallPrompt,
     queueGateTrigger,
     processOfflineQueue,
-    clearOfflineQueue,
-    
-    // Simple online status
-    isOnline
+    clearOfflineQueue
   };
 }

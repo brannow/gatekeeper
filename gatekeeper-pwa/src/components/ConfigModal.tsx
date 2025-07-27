@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useConfig } from '../hooks/useConfig';
 import { validationService } from '../services/ValidationService';
+import { createNetworkService } from '../services/NetworkService';
+import { createHttpAdapter } from '../adapters/HttpAdapter';
+import { createMqttAdapter } from '../adapters/MqttAdapter';
 import type { NetworkResult } from '../types/network';
 import type { ValidationError, ThemeMode, AppConfig } from '../types';
-import { createPersistentNetworkService } from '../services/PersistentNetworkService';
 
 interface ConfigModalProps {
   isOpen: boolean;
@@ -44,7 +46,9 @@ interface FormErrors {
 type TabType = 'esp32' | 'mqtt' | 'theme';
 
 const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose }) => {
-  const { config, validateAndSave, updateReachabilityStatus, loading } = useConfig();
+  const configHook = useConfig();
+  
+  const { config, validateAndSave, updateReachabilityStatus, loading } = configHook;
   const [activeTab, setActiveTab] = useState<TabType>('esp32');
   
   const [formState, setFormState] = useState<FormState>({
@@ -248,8 +252,8 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose }) => {
         return;
       }
 
-      // Create PersistentNetworkService for testing
-      const networkService = createPersistentNetworkService();
+      // Create NetworkService and appropriate adapter
+      const networkService = createNetworkService();
       let testResult: NetworkResult[] = [];
       
       if (type === 'esp32') {
@@ -259,10 +263,10 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose }) => {
           reachabilityStatus: 'unknown' as const
         };
         
-        console.log('[ConfigModal] Testing ESP32 HTTP connection...');
-        // Update service with config to create HTTP adapter
-        await networkService.updateConfig(esp32Config, undefined);
+        const httpAdapter = createHttpAdapter(esp32Config);
+        await networkService.addAdapter(httpAdapter);
         
+        console.log('[ConfigModal] Testing ESP32 HTTP connection...');
         testResult = await networkService.testAllConnections();
         
         await networkService.cleanup();
@@ -282,10 +286,10 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose }) => {
           reachabilityStatus: 'unknown' as const
         };
         
-        console.log('[ConfigModal] Testing MQTT connection...');
-        // Update service with config to create MQTT adapter
-        await networkService.updateConfig(undefined, mqttConfig);
+        const mqttAdapter = createMqttAdapter(mqttConfig);
+        await networkService.addAdapter(mqttAdapter);
         
+        console.log('[ConfigModal] Testing MQTT connection...');
         testResult = await networkService.testAllConnections();
         
         await networkService.cleanup();

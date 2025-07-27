@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useConfig } from '../hooks/useConfig';
 import { validationService } from '../services/ValidationService';
-import { createNetworkService } from '../services/NetworkService';
-import { createHttpAdapter } from '../adapters/HttpAdapter';
-import { createMqttAdapter } from '../adapters/MqttAdapter';
+import { createPersistentNetworkService } from '../services/PersistentNetworkService';
 import type { NetworkResult } from '../types/network';
 import type { ValidationError, ThemeMode, AppConfig } from '../types';
 
@@ -250,8 +248,8 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose }) => {
         return;
       }
 
-      // Create NetworkService and appropriate adapter
-      const networkService = createNetworkService();
+      // Create PersistentNetworkService for testing
+      const networkService = createPersistentNetworkService();
       let testResult: NetworkResult[] = [];
       
       if (type === 'esp32') {
@@ -261,10 +259,10 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose }) => {
           reachabilityStatus: 'unknown' as const
         };
         
-        const httpAdapter = createHttpAdapter(esp32Config);
-        await networkService.addAdapter(httpAdapter);
-        
         console.log('[ConfigModal] Testing ESP32 HTTP connection...');
+        // Update service with config to create HTTP adapter
+        await networkService.updateConfig(esp32Config, undefined);
+        
         testResult = await networkService.testAllConnections();
         
         await networkService.cleanup();
@@ -284,10 +282,10 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose }) => {
           reachabilityStatus: 'unknown' as const
         };
         
-        const mqttAdapter = createMqttAdapter(mqttConfig);
-        await networkService.addAdapter(mqttAdapter);
-        
         console.log('[ConfigModal] Testing MQTT connection...');
+        // Update service with config to create MQTT adapter
+        await networkService.updateConfig(undefined, mqttConfig);
+        
         testResult = await networkService.testAllConnections();
         
         await networkService.cleanup();

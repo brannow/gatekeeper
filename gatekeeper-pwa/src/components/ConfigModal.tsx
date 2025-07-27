@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useConfig } from '../hooks/useConfig';
 import { validationService } from '../services/ValidationService';
-import { createPersistentNetworkService } from '../services/PersistentNetworkService';
 import type { NetworkResult } from '../types/network';
 import type { ValidationError, ThemeMode, AppConfig } from '../types';
+import { createPersistentNetworkService } from '../services/PersistentNetworkService';
 
 interface ConfigModalProps {
   isOpen: boolean;

@@ -6,6 +6,7 @@ import { useNetworkStatusWithConfig } from './useNetworkStatus';
 import { createReachabilityTargets } from '../services/ReachabilityService';
 import { RelayState } from '../types';
 import { NetworkServiceDelegate } from '../types/network';
+import { createPersistentNetworkService } from '../services/PersistentNetworkService';
 
 /**
  * Interface that defines the contract for persistent network services
@@ -177,7 +178,6 @@ export function useGateControl(): GateControlInterface {
         console.log('[useGateControl] Initializing persistent network service');
         
         // Phase 2: Use actual PersistentNetworkService implementation
-        const { createPersistentNetworkService } = await import('../services/PersistentNetworkService');
         const persistentService = createPersistentNetworkService();
 
         // Set up the service

@@ -1,5 +1,5 @@
 import React from 'react';
-import { useGatekeeper } from '../hooks/useGatekeeper';
+import { useGateControl } from '../hooks/useGateControl';
 
 const TriggerButton: React.FC = () => {
   const {
@@ -14,7 +14,7 @@ const TriggerButton: React.FC = () => {
     handleTrigger,
     currentMethod,
     networkService,
-  } = useGatekeeper();
+  } = useGateControl();
 
   if (loading) {
     return (

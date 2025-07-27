@@ -46,9 +46,7 @@ interface FormErrors {
 type TabType = 'esp32' | 'mqtt' | 'theme';
 
 const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose }) => {
-  const configHook = useConfig();
-  
-  const { config, validateAndSave, updateReachabilityStatus, loading } = configHook;
+  const { config, validateAndSave, updateReachabilityStatus, loading } = useConfig();
   const [activeTab, setActiveTab] = useState<TabType>('esp32');
   
   const [formState, setFormState] = useState<FormState>({

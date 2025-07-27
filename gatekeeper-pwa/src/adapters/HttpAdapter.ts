@@ -1,4 +1,4 @@
-import type { HttpAdapter as IHttpAdapter } from '../types/network';
+import type { HttpAdapter as IHttpAdapter, StatusChangeCallback } from '../types/network';
 import type { ESP32Config } from '../types';
 import { validationService } from '../services/ValidationService';
 import { NetworkErrorHandler } from '../network/NetworkErrorHandler';
@@ -13,6 +13,8 @@ export class HttpAdapter implements IHttpAdapter {
   readonly method = 'http' as const;
   readonly timeout = NETWORK_TIMEOUTS.HTTP;
   readonly name = 'ESP32 HTTP Adapter';
+  
+  private statusChangeCallback?: StatusChangeCallback;
 
   constructor(public config: ESP32Config) {}
 
@@ -38,12 +40,30 @@ export class HttpAdapter implements IHttpAdapter {
   }
 
   /**
+   * Set callback for real-time status changes
+   * @param callback Function to call when adapter status changes
+   */
+  setStatusChangeCallback(callback: StatusChangeCallback): void {
+    this.statusChangeCallback = callback;
+  }
+
+  /**
+   * Notify status change if callback is set
+   */
+  private notifyStatusChange(status: 'reachable' | 'unreachable' | 'unknown'): void {
+    if (this.statusChangeCallback) {
+      this.statusChangeCallback('esp32', status);
+    }
+  }
+
+  /**
    * Clean up adapter resources
    * HTTP adapter is stateless, so cleanup is minimal
    */
   async cleanup(): Promise<void> {
     console.log('[HttpAdapter] Cleaning up...');
     // HTTP adapter has no persistent connections to clean up
+    this.statusChangeCallback = undefined;
     console.log('[HttpAdapter] Cleanup completed');
   }
 
@@ -72,9 +92,11 @@ export class HttpAdapter implements IHttpAdapter {
       
       if (response.ok) {
         console.log(`[HttpAdapter] Gate triggered successfully in ${duration}ms`);
+        this.notifyStatusChange('reachable');
         return true;
       } else {
         console.warn(`[HttpAdapter] Server responded with ${response.status}: ${response.statusText} in ${duration}ms`);
+        this.notifyStatusChange('unreachable');
         return false;
       }
       
@@ -82,6 +104,7 @@ export class HttpAdapter implements IHttpAdapter {
       const context = NetworkErrorHandler.createContext('http', 'gate trigger', startTime, this.config);
       const networkError = NetworkErrorHandler.categorizeError(error as Error, context);
       NetworkErrorHandler.logError('Gate trigger failed', networkError, context);
+      this.notifyStatusChange('unreachable');
       return false;
     }
   }
@@ -118,12 +141,14 @@ export class HttpAdapter implements IHttpAdapter {
         `[HttpAdapter] Connection test ${success ? 'passed' : 'failed'} in ${duration}ms (status: ${response.status})`
       );
       
+      this.notifyStatusChange(success ? 'reachable' : 'unreachable');
       return success;
       
     } catch (error) {
       const context = NetworkErrorHandler.createContext('http', 'connection test', startTime, this.config);
       const networkError = NetworkErrorHandler.categorizeError(error as Error, context);
       NetworkErrorHandler.logError('Connection test failed', networkError, context);
+      this.notifyStatusChange('unreachable');
       return false;
     }
   }

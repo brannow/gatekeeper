@@ -227,11 +227,32 @@ export class MqttService {
         this.ws.onopen = () => {
           console.log('[MqttService] WebSocket connected, sending CONNECT packet...');
           const connectPacket = this.createConnectPacket();
+          console.log('[MqttService] CONNECT packet bytes:', Array.from(connectPacket).map(b => `0x${b.toString(16).padStart(2, '0')}`).join(' '));
           this.ws!.send(connectPacket);
         };
 
-        this.ws.onmessage = (event) => {
-          this.handleMqttMessage(event.data, resolve);
+        this.ws.onmessage = async (event) => {
+          try {
+            console.log('[MqttService] Raw message received:', event.data);
+            
+            let arrayBuffer: ArrayBuffer;
+            if (event.data instanceof ArrayBuffer) {
+              arrayBuffer = event.data;
+            } else if (event.data instanceof Blob) {
+              arrayBuffer = await event.data.arrayBuffer();
+            } else {
+              console.error('[MqttService] Unexpected message type:', typeof event.data);
+              return;
+            }
+            
+            const buffer = new Uint8Array(arrayBuffer);
+            console.log('[MqttService] Message bytes:', Array.from(buffer).map(b => `0x${b.toString(16).padStart(2, '0')}`).join(' '));
+            
+            this.handleMqttMessage(arrayBuffer, resolve);
+          } catch (error) {
+            console.error('[MqttService] Error processing MQTT message:', error);
+            reject(new Error('MQTT message processing failed'));
+          }
         };
 
         this.ws.onerror = (error) => {
@@ -241,6 +262,7 @@ export class MqttService {
 
         this.ws.onclose = (event) => {
           console.log(`[MqttService] WebSocket closed: ${event.code} ${event.reason}`);
+          console.log(`[MqttService] Connection state when closed - isConnected: ${this.isConnected}, isConnecting: ${this.isConnecting}`);
           this.handleDisconnection();
           if (!this.isConnected) {
             reject(new Error(`WebSocket closed: ${event.reason || 'Unknown reason'}`));
@@ -282,6 +304,10 @@ export class MqttService {
         case 13: // PINGRESP
           console.log('[MqttService] Ping response received');
           break;
+        case 14: // DISCONNECT
+          console.log('[MqttService] DISCONNECT received from broker');
+          this.handleDisconnect(buffer);
+          break;
         default:
           console.log(`[MqttService] Unknown message type: ${messageType}`);
       }
@@ -291,22 +317,48 @@ export class MqttService {
   }
 
   /**
-   * Handle CONNACK message
+   * Handle CONNACK message (MQTT 5.0)
    */
   private handleConnAck(buffer: Uint8Array, connectResolve?: (value: boolean) => void): void {
-    if (buffer.length < 4) {
+    // MQTT 5.0 CONNACK: [fixed header][connect ack flags][reason code][properties]
+    if (buffer.length < 5) { // Minimum: type + length + ack flags + reason code + properties length
+      console.error('[MqttService] Invalid CONNACK packet length');
       connectResolve?.(false);
       return;
     }
 
-    const returnCode = buffer[3];
-    if (returnCode === 0) {
+    const connectAckFlags = buffer[2]; // Session present flag
+    const reasonCode = buffer[3]; // MQTT 5.0 reason code
+    const propertiesLength = buffer[4]; // Properties length
+    
+    console.log(`[MqttService] CONNACK received - flags: ${connectAckFlags}, reason: ${reasonCode}, props: ${propertiesLength}`);
+    
+    if (reasonCode === 0) {
       console.log('[MqttService] MQTT connection acknowledged');
       connectResolve?.(true);
     } else {
-      console.error(`[MqttService] MQTT connection rejected, code: ${returnCode}`);
+      console.error(`[MqttService] MQTT connection rejected, reason code: ${reasonCode}`);
       connectResolve?.(false);
     }
+  }
+
+  /**
+   * Handle DISCONNECT message (MQTT 5.0)
+   */
+  private handleDisconnect(buffer: Uint8Array): void {
+    if (buffer.length >= 3) {
+      const reasonCode = buffer[2];
+      console.log(`[MqttService] Broker disconnected with reason code: ${reasonCode}`);
+      
+      // Reason codes: 0x00 = Normal disconnect, 0x81 = Malformed packet, etc.
+      if (reasonCode === 0x81) {
+        console.error('[MqttService] Broker rejected packet as malformed');
+      }
+    }
+    
+    // Broker initiated disconnect - don't reconnect immediately
+    this.isConnected = false;
+    this.clearTimers();
   }
 
   /**
@@ -370,11 +422,13 @@ export class MqttService {
     const hasUsername = this.config.username && this.config.username.length > 0;
     const hasPassword = this.config.password && this.config.password.length > 0;
     
-    let flags = 0x02; // Clean session
+    let flags = 0x02; // Clean start (MQTT 5.0)
     if (hasUsername) flags |= 0x80;
     if (hasPassword) flags |= 0x40;
     
-    const variableHeaderLength = 10;
+    // MQTT 5.0 requires properties field
+    const propertiesLength = 1; // Empty properties = 1 byte (length = 0)
+    const variableHeaderLength = 10 + propertiesLength; // 10 + properties
     const payloadLength = 2 + clientIdBytes.length + 
                          (hasUsername ? 2 + usernameBytes.length : 0) +
                          (hasPassword ? 2 + passwordBytes.length : 0);
@@ -395,10 +449,13 @@ export class MqttService {
     packet[offset++] = 0x51; // 'Q'
     packet[offset++] = 0x54; // 'T'
     packet[offset++] = 0x54; // 'T'
-    packet[offset++] = 0x04; // Protocol level
+    packet[offset++] = 0x05; // Protocol level (MQTT 5.0)
     packet[offset++] = flags; // Connect flags
     packet[offset++] = 0x00; // Keep alive MSB
     packet[offset++] = 0x3C; // Keep alive LSB (60 seconds)
+    
+    // MQTT 5.0 Properties (empty)
+    packet[offset++] = 0x00; // Properties length = 0
     
     // Payload - Client ID
     packet[offset++] = (clientIdBytes.length >> 8) & 0xFF;
@@ -455,13 +512,15 @@ export class MqttService {
   }
 
   /**
-   * Create MQTT SUBSCRIBE packet
+   * Create MQTT SUBSCRIBE packet (MQTT 5.0)
    */
   private createSubscribePacket(topic: string): Uint8Array {
     const topicBytes = new TextEncoder().encode(topic);
     const packetId = Math.floor(Math.random() * 65535) + 1;
     
-    const variableHeaderLength = 2; // Packet identifier
+    // MQTT 5.0 requires properties field
+    const propertiesLength = 1; // Empty properties = 1 byte (length = 0)
+    const variableHeaderLength = 2 + propertiesLength; // Packet identifier + properties
     const payloadLength = 2 + topicBytes.length + 1; // Topic + QoS
     const totalLength = variableHeaderLength + payloadLength;
     const packet = new Uint8Array(2 + totalLength);
@@ -476,12 +535,17 @@ export class MqttService {
     packet[offset++] = (packetId >> 8) & 0xFF;
     packet[offset++] = packetId & 0xFF;
     
+    // MQTT 5.0 Properties (empty)
+    packet[offset++] = 0x00; // Properties length = 0
+    
     // Payload - Topic filter
     packet[offset++] = (topicBytes.length >> 8) & 0xFF;
     packet[offset++] = topicBytes.length & 0xFF;
     packet.set(topicBytes, offset);
     offset += topicBytes.length;
     packet[offset++] = 0x00; // QoS 0
+    
+    console.log(`[MqttService] SUBSCRIBE packet bytes:`, Array.from(packet).map(b => `0x${b.toString(16).padStart(2, '0')}`).join(' '));
     
     return packet;
   }
@@ -563,7 +627,7 @@ export class MqttService {
   private buildWebSocketUrl(config: MQTTConfig): string {
     const protocol = config.ssl ? 'wss' : 'ws';
     const port = config.port === (config.ssl ? 443 : 80) ? '' : `:${config.port}`;
-    return `${protocol}://${config.host}${port}/mqtt`;
+    return `${protocol}://${config.host}${port}/`;
   }
 
   /**

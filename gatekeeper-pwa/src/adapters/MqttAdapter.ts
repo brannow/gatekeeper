@@ -1,4 +1,4 @@
-import type { MqttAdapter as IMqttAdapter } from '../types/network';
+import type { MqttAdapter as IMqttAdapter, StatusChangeCallback } from '../types/network';
 import type { MQTTConfig, RelayState } from '../types';
 import { MqttService } from '../services/MqttService';
 import { NetworkErrorHandler } from '../network/NetworkErrorHandler';
@@ -25,6 +25,7 @@ export class MqttAdapter implements IMqttAdapter {
   // Enhanced Phase 3 features for relay state monitoring
   private relayStateCallback?: (state: RelayState) => void;
   private currentRelayState: RelayState = 'released';
+  private statusChangeCallback?: StatusChangeCallback;
 
   constructor(public config: MQTTConfig) {
     this.service = new MqttService(config);
@@ -46,6 +47,7 @@ export class MqttAdapter implements IMqttAdapter {
       // Connect to MQTT broker
       const connected = await this.service.connect();
       if (!connected) {
+        this.notifyStatusChange('unreachable');
         throw new Error('Failed to connect to MQTT broker');
       }
 
@@ -55,15 +57,35 @@ export class MqttAdapter implements IMqttAdapter {
       });
 
       if (!subscribed) {
+        this.notifyStatusChange('unreachable');
         throw new Error('Failed to subscribe to status topic');
       }
 
+      this.notifyStatusChange('reachable');
       console.log(`[MqttAdapter] Initialized successfully, subscribed to ${this.statusTopic}`);
     } catch (error) {
       const context = NetworkErrorHandler.createContext('mqtt', 'initialization', startTime, this.config);
       const networkError = NetworkErrorHandler.categorizeError(error as Error, context);
       NetworkErrorHandler.logError('Initialization failed', networkError, context);
+      this.notifyStatusChange('unreachable');
       throw error;
+    }
+  }
+
+  /**
+   * Set callback for real-time status changes
+   * @param callback Function to call when adapter status changes
+   */
+  setStatusChangeCallback(callback: StatusChangeCallback): void {
+    this.statusChangeCallback = callback;
+  }
+
+  /**
+   * Notify status change if callback is set
+   */
+  private notifyStatusChange(status: 'reachable' | 'unreachable' | 'unknown'): void {
+    if (this.statusChangeCallback) {
+      this.statusChangeCallback('mqtt', status);
     }
   }
 
@@ -82,6 +104,10 @@ export class MqttAdapter implements IMqttAdapter {
       
       // Disconnect from broker
       await this.service.disconnect();
+      
+      // Clear callbacks
+      this.statusChangeCallback = undefined;
+      this.relayStateCallback = undefined;
       
       console.log('[MqttAdapter] Cleanup completed');
     } catch (error) {
@@ -169,12 +195,14 @@ export class MqttAdapter implements IMqttAdapter {
         `[MqttAdapter] Connection test ${connected ? 'passed' : 'failed'} in ${duration}ms`
       );
       
+      this.notifyStatusChange(connected ? 'reachable' : 'unreachable');
       return connected;
       
     } catch (error) {
       const context = NetworkErrorHandler.createContext('mqtt', 'connection test', startTime, this.config);
       const networkError = NetworkErrorHandler.categorizeError(error as Error, context);
       NetworkErrorHandler.logError('Connection test failed', networkError, context);
+      this.notifyStatusChange('unreachable');
       return false;
     }
   }

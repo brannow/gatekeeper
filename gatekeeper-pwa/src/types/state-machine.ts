@@ -123,7 +123,7 @@ export const STATE_METADATA: Record<GateState, {
  */
 export const DEFAULT_STATE_MACHINE_CONFIG: StateMachineConfig = {
   timeouts: {
-    triggering: 5000,            // 5 seconds for gate trigger
+    triggering: 0,               // No timeout - let NetworkService handle this
     waitingForRelayClose: 15000, // 15 seconds for relay completion
     errorRecovery: 3000          // 3 seconds before auto-recovery
   },
@@ -208,7 +208,7 @@ export function canRetryFromState(state: GateState): boolean {
 export function getStateTimeout(state: GateState, config = DEFAULT_STATE_MACHINE_CONFIG): number | null {
   switch (state) {
     case 'triggering':
-      return config.timeouts.triggering;
+      return config.timeouts.triggering > 0 ? config.timeouts.triggering : null; // No timeout if 0
     case 'waitingForRelayClose':
       return config.timeouts.waitingForRelayClose;
     case 'timeout':

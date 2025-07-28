@@ -31,7 +31,7 @@ export function useGatekeeper() {
       const adapterName = adapter ? adapter.name : 'Unknown adapter';
       console.error(`[useGatekeeper] Gate trigger failed via ${adapterName}:`, error.message);
       setNetworkError(error.message);
-      setCurrentMethod(null);
+      setCurrentMethod(adapter ? adapter.method : null);
     },
     onConnectionTest: (adapter, success, duration) => {
       console.log(`[useGatekeeper] Connection test for ${adapter.name}: ${success ? 'passed' : 'failed'} in ${duration}ms`);

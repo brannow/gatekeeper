@@ -12,6 +12,7 @@ import type {
   ThemeMode
 } from '../types';
 import type { StateMachineConfig } from '../types/state-machine';
+import { DEFAULT_STATE_MACHINE_CONFIG } from '../types/state-machine';
 import { configManager } from '../services/ConfigManager';
 
 /**
@@ -25,7 +26,7 @@ export interface EnhancedConfigHookInterface extends ConfigHookInterface {
   smLoading: boolean;
   smError: string | null;
   
-  // State machine configuration methods
+  // State machine config methods - now stubs since using static config
   updateStateMachineConfig: (config: Partial<StateMachineConfig>) => Promise<void>;
   loadStateMachineConfig: () => Promise<void>;
   resetStateMachineConfig: () => Promise<void>;
@@ -80,22 +81,12 @@ export function useConfig(): EnhancedConfigHookInterface {
   const [error, setError] = useState<string | null>(null);
 
   
-  // State machine configuration state
-  const [stateMachineConfig, setStateMachineConfig] = useState<StateMachineConfig>({
-    timeouts: {
-      triggering: 5000,
-      waitingForRelayClose: 15000,
-      errorRecovery: 3000
-    },
-    retry: {
-      maxAttempts: 3,
-      backoffMultiplier: 2,
-      baseDelay: 1000
-    }
-  });
+  // Use default state machine config from types - single source of truth
+  const stateMachineConfig = DEFAULT_STATE_MACHINE_CONFIG;
   
-  const [smLoading, setSmLoading] = useState<boolean>(false);
-  const [smError, setSmError] = useState<string | null>(null);
+  // State machine config is now static - no loading/error states needed
+  const smLoading = false;
+  const smError = null;
   
   // PWA state (Phase 4)
   const [offlineStatus, setOfflineStatus] = useState<OfflineStatus>('checking');
@@ -272,21 +263,15 @@ export function useConfig(): EnhancedConfigHookInterface {
     const loadInitialConfig = async () => {
       try {
         setLoading(true);
-        setSmLoading(true);
         setError(null);
-        setSmError(null);
         
         console.log('[useConfig] Loading initial configuration');
         
-        // Load main configuration
+        // Load main configuration only - state machine config is static
         const loadedConfig = await configManager.loadConfig();
-        
-        // Load state machine configuration
-        const loadedStateMachineConfig = await configManager.loadStateMachineConfig();
         
         if (mounted) {
           setConfig(loadedConfig);
-          setStateMachineConfig(loadedStateMachineConfig);
           console.log('[useConfig] Configuration loaded successfully');
         }
       } catch (err) {
@@ -298,9 +283,7 @@ export function useConfig(): EnhancedConfigHookInterface {
           // Use defaults if loading fails
           try {
             const defaultConfig = await configManager.resetToDefaults();
-            const defaultStateMachineConfig = await configManager.loadStateMachineConfig();
             setConfig(defaultConfig);
-            setStateMachineConfig(defaultStateMachineConfig);
             console.log('[useConfig] Fallback to default configuration');
           } catch (resetErr) {
             console.error('[useConfig] Failed to reset to defaults:', resetErr);
@@ -309,7 +292,6 @@ export function useConfig(): EnhancedConfigHookInterface {
       } finally {
         if (mounted) {
           setLoading(false);
-          setSmLoading(false);
         }
       }
     };
@@ -462,84 +444,17 @@ export function useConfig(): EnhancedConfigHookInterface {
   }, []);
 
 
-  /**
-   * Updates state machine configuration with validation and persistence
-   * @param updatedConfig Partial state machine configuration to merge
-   */
-  const updateStateMachineConfig = useCallback(async (updatedConfig: Partial<StateMachineConfig>): Promise<void> => {
-    try {
-      setSmError(null);
-      
-      // Create updated configuration
-      const newStateMachineConfig: StateMachineConfig = {
-        timeouts: {
-          ...stateMachineConfig.timeouts,
-          ...updatedConfig.timeouts
-        },
-        retry: {
-          ...stateMachineConfig.retry,
-          ...updatedConfig.retry
-        }
-      };
-      
-      // Save and update state
-      await configManager.saveStateMachineConfig(newStateMachineConfig);
-      setStateMachineConfig(newStateMachineConfig);
-      
-      console.log('[useConfig] State machine configuration updated successfully');
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to update state machine configuration';
-      console.error('[useConfig] Failed to update state machine configuration:', err);
-      setSmError(errorMessage);
-      throw err;
-    }
-  }, [stateMachineConfig]);
-
-  /**
-   * Loads state machine configuration from storage
-   */
-  const loadStateMachineConfig = useCallback(async (): Promise<void> => {
-    try {
-      setSmLoading(true);
-      setSmError(null);
-      
-      console.log('[useConfig] Loading state machine configuration');
-      const loadedConfig = await configManager.loadStateMachineConfig();
-      
-      setStateMachineConfig(loadedConfig);
-      console.log('[useConfig] State machine configuration loaded successfully');
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to load state machine configuration';
-      console.error('[useConfig] Failed to load state machine configuration:', err);
-      setSmError(errorMessage);
-      throw err;
-    } finally {
-      setSmLoading(false);
-    }
+  // State machine config methods - now stubs since using static DEFAULT_STATE_MACHINE_CONFIG
+  const updateStateMachineConfig = useCallback(async (_updatedConfig: Partial<StateMachineConfig>): Promise<void> => {
+    console.log('[useConfig] State machine config is now static - ignoring update request');
   }, []);
 
-  /**
-   * Resets state machine configuration to defaults
-   */
+  const loadStateMachineConfig = useCallback(async (): Promise<void> => {
+    console.log('[useConfig] State machine config is static - no loading needed');
+  }, []);
+
   const resetStateMachineConfig = useCallback(async (): Promise<void> => {
-    try {
-      setSmLoading(true);
-      setSmError(null);
-      
-      console.log('[useConfig] Resetting state machine configuration to defaults');
-      const defaultConfig = await configManager.loadStateMachineConfig();
-      await configManager.saveStateMachineConfig(defaultConfig);
-      
-      setStateMachineConfig(defaultConfig);
-      console.log('[useConfig] State machine configuration reset successfully');
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to reset state machine configuration';
-      console.error('[useConfig] Failed to reset state machine configuration:', err);
-      setSmError(errorMessage);
-      throw err;
-    } finally {
-      setSmLoading(false);
-    }
+    console.log('[useConfig] State machine config is static - no reset needed');
   }, []);
 
   /**
@@ -592,7 +507,6 @@ export function useConfig(): EnhancedConfigHookInterface {
   const exportFullConfig = useCallback(async (): Promise<string> => {
     try {
       setError(null);
-      setSmError(null);
       
       console.log('[useConfig] Exporting full configuration');
       const exportedConfig = await configManager.exportFullConfig();
@@ -614,18 +528,13 @@ export function useConfig(): EnhancedConfigHookInterface {
   const importFullConfig = useCallback(async (configJson: string): Promise<void> => {
     try {
       setLoading(true);
-      setSmLoading(true);
       setError(null);
-      setSmError(null);
       
       console.log('[useConfig] Importing full configuration');
       const importedConfig = await configManager.importFullConfig(configJson);
       
-      // Reload both configurations
-      const reloadedStateMachineConfig = await configManager.loadStateMachineConfig();
-      
+      // Only reload main config - state machine config is static
       setConfig(importedConfig);
-      setStateMachineConfig(reloadedStateMachineConfig);
       console.log('[useConfig] Full configuration imported successfully');
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to import full configuration';
@@ -634,7 +543,6 @@ export function useConfig(): EnhancedConfigHookInterface {
       throw err;
     } finally {
       setLoading(false);
-      setSmLoading(false);
     }
   }, []);
 

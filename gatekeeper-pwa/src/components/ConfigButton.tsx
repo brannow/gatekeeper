@@ -103,9 +103,8 @@ const ConfigButton: React.FC<ConfigButtonProps> = ({ onClick, onInstallPrompt, c
   const analyzeConfigurationIssues = useCallback((config: AppConfig, error: string | null): ConfigurationIssues => {
     const { esp32, mqtt } = config;
     
-    // Check if both protocols are unreachable
-    const bothUnreachable = esp32.reachabilityStatus === 'unreachable' && 
-                           mqtt.reachabilityStatus === 'unreachable';
+    // Check if both protocols have configuration issues
+    const bothUnreachable = false; // Simplified without reachability checking
     
     // Check if no configurations are set up
     const noConfigsSetup = (!esp32.host || esp32.host.trim() === '') && 

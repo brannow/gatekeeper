@@ -7,17 +7,15 @@
  * Gate state machine matching Swift app's GateState enum
  * State transitions follow clean state machine patterns:
  * 
- * ready → checkingNetwork → [noNetwork | triggering] → waitingForRelayClose → ready
- *                               ↓                            ↓
- *                           [timeout | error] ←──────── [timeout | error]
+ * ready → triggering → waitingForRelayClose → ready
+ *              ↓              ↓
+ *          [timeout | error] ←─── [timeout | error]
  * 
  * Error recovery: error/timeout → ready (after delay)
  * Network retry: noNetwork → checkingNetwork (user interaction)
  */
 export type GateState = 
   | 'ready'                // Gate is ready for trigger, all systems operational
-  | 'checkingNetwork'      // Performing network reachability checks
-  | 'noNetwork'           // No network connectivity detected
   | 'triggering'          // Gate trigger command in progress
   | 'waitingForRelayClose' // Waiting for relay to complete gate operation
   | 'timeout'             // Operation timed out, recoverable error state
@@ -35,18 +33,11 @@ export type RelayState = 'activated' | 'released';
  */
 export type GateAction = 
   | 'userPressed'           // User triggered gate action
-  | 'configChanged'         // Configuration was updated
-  | 'reachabilityResult'    // Network reachability test completed
   | 'relayChanged'          // Relay state changed
   | 'requestComplete'       // Network request completed (success/failure)
   | 'timeout'               // Operation timeout occurred
   | 'retry';                // Retry operation triggered
 
-/**
- * Reachability status for network connectivity
- * Used by both ESP32 and MQTT configurations
- */
-export type ReachabilityStatus = 'reachable' | 'unreachable' | 'unknown';
 
 /**
  * PWA-specific types for Phase 4 offline functionality
@@ -71,7 +62,7 @@ export type ThemeMode = 'bright' | 'dark' | 'system';
 /**
  * Offline queue item types
  */
-export type OfflineQueueItemType = 'gate_trigger' | 'config_update' | 'reachability_check';
+export type OfflineQueueItemType = 'gate_trigger' | 'config_update';
 
 /**
  * Extended gate state information with metadata
@@ -113,7 +104,6 @@ export interface NetworkOperationContext {
 export interface ESP32Config {
   host: string;
   port: number;
-  reachabilityStatus?: ReachabilityStatus;
 }
 
 export interface MQTTConfig {
@@ -122,7 +112,6 @@ export interface MQTTConfig {
   username?: string;
   password?: string;
   ssl: boolean;
-  reachabilityStatus?: ReachabilityStatus;
 }
 
 /**
@@ -213,7 +202,6 @@ export interface ConfigHookInterface {
   loading: boolean;
   error: string | null;
   validateAndSave: (config: Partial<AppConfig>) => Promise<ValidationResult>;
-  updateReachabilityStatus: (type: 'esp32' | 'mqtt', status: ReachabilityStatus) => Promise<void>;
   reset: () => Promise<void>;
   export: () => Promise<string>;
   import: (configJson: string) => Promise<void>;

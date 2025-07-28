@@ -62,16 +62,14 @@ export function useConfig(): EnhancedConfigHookInterface {
   const [config, setConfig] = useState<AppConfig>({
     esp32: {
       host: '',
-      port: 80,
-      reachabilityStatus: 'unknown'
+      port: 80
     },
     mqtt: {
       host: '',
       port: 1883,
       username: '',
       password: '',
-      ssl: false,
-      reachabilityStatus: 'unknown'
+      ssl: false
     },
     theme: 'system',
     version: '2.0.0',
@@ -85,7 +83,6 @@ export function useConfig(): EnhancedConfigHookInterface {
   // State machine configuration state
   const [stateMachineConfig, setStateMachineConfig] = useState<StateMachineConfig>({
     timeouts: {
-      checkingNetwork: 10000,
       triggering: 5000,
       waitingForRelayClose: 15000,
       errorRecovery: 3000
@@ -94,11 +91,6 @@ export function useConfig(): EnhancedConfigHookInterface {
       maxAttempts: 3,
       backoffMultiplier: 2,
       baseDelay: 1000
-    },
-    reachability: {
-      initialDelay: 1000,
-      checkInterval: 30000,
-      timeoutPerCheck: 3000
     }
   });
   
@@ -469,39 +461,6 @@ export function useConfig(): EnhancedConfigHookInterface {
     }
   }, []);
 
-  /**
-   * Updates reachability status for ESP32 or MQTT configuration
-   * Used after connection tests to reflect current network status
-   * @param type Configuration type to update
-   * @param status New reachability status
-   */
-  const updateReachabilityStatus = useCallback(async (
-    type: 'esp32' | 'mqtt', 
-    status: 'reachable' | 'unreachable' | 'unknown'
-  ): Promise<void> => {
-    try {
-      // Load fresh config to avoid stale closure issues
-      const currentConfig = await configManager.loadConfig();
-      
-      const newConfig: AppConfig = {
-        ...currentConfig,
-        [type]: {
-          ...currentConfig[type],
-          reachabilityStatus: status
-        },
-        lastModified: Date.now()
-      };
-      
-      // Save updated configuration (skip validation for reachability-only updates)
-      await configManager.saveConfig(newConfig, true);
-      setConfig(newConfig);
-      
-      console.log(`[useConfig] ${type.toUpperCase()} reachability status updated to: ${status}`);
-    } catch (err) {
-      console.error(`[useConfig] Failed to update ${type} reachability status:`, err);
-      // Don't throw error for reachability status updates to avoid disrupting the UI
-    }
-  }, []); // No dependencies since we load fresh config
 
   /**
    * Updates state machine configuration with validation and persistence
@@ -520,10 +479,6 @@ export function useConfig(): EnhancedConfigHookInterface {
         retry: {
           ...stateMachineConfig.retry,
           ...updatedConfig.retry
-        },
-        reachability: {
-          ...stateMachineConfig.reachability,
-          ...updatedConfig.reachability
         }
       };
       
@@ -750,7 +705,6 @@ export function useConfig(): EnhancedConfigHookInterface {
     loading,
     error,
     validateAndSave,
-    updateReachabilityStatus,
     reset,
     export: exportConfig,
     import: importConfig,

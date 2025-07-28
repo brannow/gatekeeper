@@ -507,9 +507,6 @@ export class ConfigManager implements ExtendedConfigManagerInterface {
     
     // Validate timeouts
     if (config.timeouts) {
-      if (typeof config.timeouts.checkingNetwork === 'number' && config.timeouts.checkingNetwork > 0) {
-        result.timeouts.checkingNetwork = Math.min(config.timeouts.checkingNetwork, 60000); // Max 60s
-      }
       if (typeof config.timeouts.triggering === 'number' && config.timeouts.triggering > 0) {
         result.timeouts.triggering = Math.min(config.timeouts.triggering, 30000); // Max 30s
       }
@@ -534,18 +531,6 @@ export class ConfigManager implements ExtendedConfigManagerInterface {
       }
     }
     
-    // Validate reachability configuration
-    if (config.reachability) {
-      if (typeof config.reachability.initialDelay === 'number' && config.reachability.initialDelay >= 0) {
-        result.reachability.initialDelay = Math.min(config.reachability.initialDelay, 10000); // Max 10s
-      }
-      if (typeof config.reachability.checkInterval === 'number' && config.reachability.checkInterval >= 5000) {
-        result.reachability.checkInterval = Math.min(config.reachability.checkInterval, 300000); // Max 5 minutes
-      }
-      if (typeof config.reachability.timeoutPerCheck === 'number' && config.reachability.timeoutPerCheck >= 1000) {
-        result.reachability.timeoutPerCheck = Math.min(config.reachability.timeoutPerCheck, 15000); // Max 15s
-      }
-    }
     
     return result;
   }

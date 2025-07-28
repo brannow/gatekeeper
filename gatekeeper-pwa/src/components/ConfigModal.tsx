@@ -48,7 +48,7 @@ type TabType = 'esp32' | 'mqtt' | 'theme';
 const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose }) => {
   const configHook = useConfig();
   
-  const { config, validateAndSave, updateReachabilityStatus, loading } = configHook;
+  const { config, validateAndSave, loading } = configHook;
   const [activeTab, setActiveTab] = useState<TabType>('esp32');
   
   const [formState, setFormState] = useState<FormState>({
@@ -139,8 +139,7 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose }) => {
     if (formState.esp32.host.trim()) {
       const esp32Config = {
         host: formState.esp32.host.trim(),
-        port: parseInt(formState.esp32.port.trim()) || 0,
-        reachabilityStatus: 'unknown' as const
+        port: parseInt(formState.esp32.port.trim()) || 0
       };
 
       const esp32ValidationResult = validationService.validateESP32Config(esp32Config);
@@ -167,8 +166,7 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose }) => {
         port: parseInt(formState.mqtt.port.trim()) || 1883,
         username: formState.mqtt.username.trim() || undefined,
         password: formState.mqtt.password.trim() || undefined,
-        ssl: formState.mqtt.ssl,
-        reachabilityStatus: 'unknown' as const
+        ssl: formState.mqtt.ssl
       };
 
       const mqttValidationResult = validationService.validateMQTTConfig(mqttConfig);
@@ -231,13 +229,10 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose }) => {
     }
   };
 
-  // Handle connection testing
+  // Handle connection testing - simplified without reachability
   const handleTestConnection = async (type: 'esp32' | 'mqtt') => {
     setTestingConnection(prev => ({ ...prev, [type]: true }));
     setConnectionResults(prev => ({ ...prev, [type]: undefined }));
-    
-    // Set reachability status to unknown while testing
-    await updateReachabilityStatus(type, 'unknown');
     
     try {
       // Validate form before testing
@@ -259,8 +254,7 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose }) => {
       if (type === 'esp32') {
         const esp32Config = {
           host: formState.esp32.host.trim(),
-          port: parseInt(formState.esp32.port.trim(), 10),
-          reachabilityStatus: 'unknown' as const
+          port: parseInt(formState.esp32.port.trim(), 10)
         };
         
         const httpAdapter = createHttpAdapter(esp32Config);
@@ -282,8 +276,7 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose }) => {
           port: parseInt(formState.mqtt.port.trim() || '1883', 10),
           username: formState.mqtt.username.trim() || undefined,
           password: formState.mqtt.password.trim() || undefined,
-          ssl: formState.mqtt.ssl,
-          reachabilityStatus: 'unknown' as const
+          ssl: formState.mqtt.ssl
         };
         
         const mqttAdapter = createMqttAdapter(mqttConfig);
@@ -299,10 +292,6 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose }) => {
       const success = testResult.length > 0 && testResult[0].success;
       setConnectionResults(prev => ({ ...prev, [type]: success }));
       
-      // Update reachability status in configuration with real-time feedback
-      const reachabilityStatus = success ? 'reachable' : 'unreachable';
-      await updateReachabilityStatus(type, reachabilityStatus);
-      
       if (success) {
         console.log(`[ConfigModal] ${type.toUpperCase()} connection test: SUCCESS`);
       } else {
@@ -313,9 +302,6 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose }) => {
     } catch (error) {
       console.error(`[ConfigModal] ${type.toUpperCase()} connection test failed:`, error);
       setConnectionResults(prev => ({ ...prev, [type]: false }));
-      
-      // Update reachability status to unreachable on error
-      await updateReachabilityStatus(type, 'unreachable');
     } finally {
       setTestingConnection(prev => ({ ...prev, [type]: false }));
     }
@@ -334,16 +320,14 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose }) => {
         theme: formState.theme,
         esp32: formState.esp32.host.trim() ? {
           host: formState.esp32.host.trim(),
-          port: parseInt(formState.esp32.port.trim(), 10) || 80,
-          reachabilityStatus: config.esp32.reachabilityStatus // Preserve current status
+          port: parseInt(formState.esp32.port.trim(), 10) || 80
         } : config.esp32, // Keep existing ESP32 config if no host provided
         mqtt: formState.mqtt.host.trim() ? {
           host: formState.mqtt.host.trim(),
           port: parseInt(formState.mqtt.port.trim(), 10) || 1883,
           username: formState.mqtt.username.trim() || undefined,
           password: formState.mqtt.password.trim() || undefined,
-          ssl: formState.mqtt.ssl,
-          reachabilityStatus: config.mqtt.reachabilityStatus // Preserve current status
+          ssl: formState.mqtt.ssl
         } : config.mqtt // Keep existing MQTT config if no host provided
       };
 
@@ -456,15 +440,6 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose }) => {
             <div className="config-section">
               <div className="section-header">
                 <h3>ESP32 HTTP Settings</h3>
-                <div className={`reachability-status ${testingConnection.esp32 ? 'testing' : config.esp32.reachabilityStatus}`}>
-                  <span className="status-dot"></span>
-                  <span className="status-text">
-                    {testingConnection.esp32 && 'Testing Connection...'}
-                    {!testingConnection.esp32 && config.esp32.reachabilityStatus === 'reachable' && 'Connected'}
-                    {!testingConnection.esp32 && config.esp32.reachabilityStatus === 'unreachable' && 'Disconnected'}
-                    {!testingConnection.esp32 && config.esp32.reachabilityStatus === 'unknown' && 'Status Unknown'}
-                  </span>
-                </div>
               </div>
               
               <div className="form-group">
@@ -534,15 +509,6 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose }) => {
             <div className="config-section">
               <div className="section-header">
                 <h3>MQTT over WebSocket Settings</h3>
-                <div className={`reachability-status ${testingConnection.mqtt ? 'testing' : config.mqtt.reachabilityStatus}`}>
-                  <span className="status-dot"></span>
-                  <span className="status-text">
-                    {testingConnection.mqtt && 'Testing Connection...'}
-                    {!testingConnection.mqtt && config.mqtt.reachabilityStatus === 'reachable' && 'Connected'}
-                    {!testingConnection.mqtt && config.mqtt.reachabilityStatus === 'unreachable' && 'Disconnected'}
-                    {!testingConnection.mqtt && config.mqtt.reachabilityStatus === 'unknown' && 'Status Unknown'}
-                  </span>
-                </div>
               </div>
               
               <div className="form-group">

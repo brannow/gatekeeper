@@ -234,20 +234,6 @@ export class ValidationService {
 
     // Validate timeouts
     if (config.timeouts) {
-      // Validate checkingNetwork timeout
-      if (config.timeouts.checkingNetwork !== undefined) {
-        if (typeof config.timeouts.checkingNetwork !== 'number' || config.timeouts.checkingNetwork <= 0) {
-          errors.push({
-            field: 'host' as keyof ESP32Config, // Using host as placeholder field
-            message: 'Checking network timeout must be a positive number',
-            code: 'range'
-          });
-        } else if (config.timeouts.checkingNetwork > 60000) {
-          warnings.push('Checking network timeout is very high (>60s) - may impact user experience');
-        } else if (config.timeouts.checkingNetwork < 1000) {
-          warnings.push('Checking network timeout is very low (<1s) - may cause premature timeouts');
-        }
-      }
 
       // Validate triggering timeout
       if (config.timeouts.triggering !== undefined) {
@@ -335,51 +321,6 @@ export class ValidationService {
       }
     }
 
-    // Validate reachability configuration
-    if (config.reachability) {
-      // Validate initialDelay
-      if (config.reachability.initialDelay !== undefined) {
-        if (typeof config.reachability.initialDelay !== 'number' || config.reachability.initialDelay < 0) {
-          errors.push({
-            field: 'host' as keyof ESP32Config,
-            message: 'Initial reachability delay must be non-negative',
-            code: 'range'
-          });
-        } else if (config.reachability.initialDelay > 10000) {
-          warnings.push('Initial reachability delay is very high (>10s) - may delay startup');
-        }
-      }
-
-      // Validate checkInterval
-      if (config.reachability.checkInterval !== undefined) {
-        if (typeof config.reachability.checkInterval !== 'number' || config.reachability.checkInterval < 5000) {
-          errors.push({
-            field: 'host' as keyof ESP32Config,
-            message: 'Reachability check interval must be at least 5 seconds',
-            code: 'range'
-          });
-        } else if (config.reachability.checkInterval > 300000) {
-          warnings.push('Reachability check interval is very high (>5min) - may miss connectivity changes');
-        } else if (config.reachability.checkInterval < 15000) {
-          warnings.push('Reachability check interval is quite frequent (<15s) - may impact performance');
-        }
-      }
-
-      // Validate timeoutPerCheck
-      if (config.reachability.timeoutPerCheck !== undefined) {
-        if (typeof config.reachability.timeoutPerCheck !== 'number' || config.reachability.timeoutPerCheck < 1000) {
-          errors.push({
-            field: 'host' as keyof ESP32Config,
-            message: 'Reachability timeout per check must be at least 1 second',
-            code: 'range'
-          });
-        } else if (config.reachability.timeoutPerCheck > 15000) {
-          warnings.push('Reachability timeout per check is very high (>15s) - may delay state transitions');
-        } else if (config.reachability.timeoutPerCheck < 2000) {
-          warnings.push('Reachability timeout per check is quite low (<2s) - may cause false negatives');
-        }
-      }
-    }
 
     return {
       isValid: errors.length === 0,

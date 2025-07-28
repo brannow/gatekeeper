@@ -1,7 +1,7 @@
 /**
  * State Machine Hook for Gatekeeper PWA
  * Manages gate state transitions, timeouts, and recovery logic
- * Integrates with ReachabilityService and NetworkService for complete state management
+ * Provides simplified state management without reachability checking
  */
 
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
@@ -43,7 +43,6 @@ export interface UseStateMachineReturn extends StateManagerInterface {
   
   // Actions
   triggerGate: () => Promise<boolean>;
-  checkNetwork: () => Promise<boolean>;
   retry: () => Promise<boolean>;
   
   // Utility methods
@@ -184,14 +183,6 @@ export function useStateMachine(config: UseStateMachineConfig = {}): UseStateMac
     // Handle conditional transitions
     let finalState = nextState;
     
-    // For reachabilityResult action, determine actual target based on context
-    if (action === 'reachabilityResult' && context) {
-      if (context.error) {
-        finalState = currentState === 'checkingNetwork' ? 'noNetwork' : 'error';
-      } else {
-        finalState = 'ready';
-      }
-    }
     
     updateState(finalState, action, context);
     return true;
@@ -259,17 +250,6 @@ export function useStateMachine(config: UseStateMachineConfig = {}): UseStateMac
     return transition('userPressed');
   }, [currentState, transition, log]);
 
-  /**
-   * Check network connectivity
-   */
-  const checkNetwork = useCallback(async (): Promise<boolean> => {
-    if (!['ready', 'noNetwork', 'error'].includes(currentState)) {
-      log(`Cannot check network from state: ${currentState}`);
-      return false;
-    }
-    
-    return transition('configChanged');
-  }, [currentState, transition, log]);
 
   /**
    * Retry current operation
@@ -334,7 +314,6 @@ export function useStateMachine(config: UseStateMachineConfig = {}): UseStateMac
     
     // Action methods
     triggerGate,
-    checkNetwork,
     retry,
     
     // Utility methods
@@ -349,7 +328,6 @@ export function useStateMachine(config: UseStateMachineConfig = {}): UseStateMac
     getValidActions,
     reset,
     triggerGate,
-    checkNetwork,
     retry,
     forceState,
     getElapsedTime,

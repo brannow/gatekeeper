@@ -17,7 +17,6 @@ export interface StateMachineConfig {
    * Maximum time to stay in transitional states before timeout (ms)
    */
   timeouts: {
-    checkingNetwork: number;    // Max time for network checks
     triggering: number;         // Max time for gate trigger
     waitingForRelayClose: number; // Max time waiting for relay
     errorRecovery: number;      // Delay before auto-recovery from error states
@@ -32,14 +31,6 @@ export interface StateMachineConfig {
     baseDelay: number;          // Base delay between retries (ms)
   };
   
-  /**
-   * Network reachability check intervals
-   */
-  reachability: {
-    initialDelay: number;       // Delay before first check (ms)
-    checkInterval: number;      // Interval between periodic checks (ms)
-    timeoutPerCheck: number;    // Timeout for individual ping (ms)
-  };
 }
 
 /**
@@ -49,46 +40,28 @@ export interface StateMachineConfig {
  */
 export const STATE_TRANSITIONS: Record<GateState, Partial<Record<GateAction, GateState>>> = {
   ready: {
-    userPressed: 'triggering',           // User triggers gate (if configured)
-    configChanged: 'checkingNetwork',    // Config changed, verify connectivity
-    reachabilityResult: 'noNetwork'     // Reachability check failed
-  },
-  
-  checkingNetwork: {
-    reachabilityResult: 'ready',         // Network check result (context-dependent)
-    timeout: 'error',                    // Network check timed out
-    configChanged: 'checkingNetwork'     // Config changed during check, restart
-  },
-  
-  noNetwork: {
-    userPressed: 'checkingNetwork',      // User retry, check network again
-    reachabilityResult: 'ready',         // Network restored
-    configChanged: 'checkingNetwork'     // Config changed, might fix connectivity
+    userPressed: 'triggering'            // User triggers gate
   },
   
   triggering: {
     relayChanged: 'waitingForRelayClose', // Relay activated, wait for completion
     requestComplete: 'ready',            // Request completed without relay feedback
-    timeout: 'timeout',                  // Trigger operation timed out
-    reachabilityResult: 'error'          // Lost network during trigger
+    timeout: 'timeout'                   // Trigger operation timed out
   },
   
   waitingForRelayClose: {
     relayChanged: 'ready',               // Relay released, operation complete
-    timeout: 'timeout',                  // Relay close timed out
-    reachabilityResult: 'error'          // Lost network during relay operation
+    timeout: 'timeout'                   // Relay close timed out
   },
   
   timeout: {
     retry: 'ready',                      // Auto or manual retry
-    userPressed: 'triggering',           // User retry trigger
-    configChanged: 'checkingNetwork'     // Config changed, might fix issue
+    userPressed: 'triggering'            // User retry trigger
   },
   
   error: {
     retry: 'ready',                      // Auto or manual retry
-    userPressed: 'checkingNetwork',      // User retry, check network first
-    configChanged: 'checkingNetwork'     // Config changed, verify new settings
+    userPressed: 'triggering'            // User retry trigger
   }
 };
 
@@ -109,22 +82,6 @@ export const STATE_METADATA: Record<GateState, {
     canRetry: false,
     isTransitional: false,
     severity: 'success'
-  },
-  
-  checkingNetwork: {
-    title: 'CHECKING NETWORK...',
-    isDisabled: true,
-    canRetry: false,
-    isTransitional: true,
-    severity: 'info'
-  },
-  
-  noNetwork: {
-    title: 'NO NETWORK',
-    isDisabled: false,
-    canRetry: true,
-    isTransitional: false,
-    severity: 'warning'
   },
   
   triggering: {
@@ -166,7 +123,6 @@ export const STATE_METADATA: Record<GateState, {
  */
 export const DEFAULT_STATE_MACHINE_CONFIG: StateMachineConfig = {
   timeouts: {
-    checkingNetwork: 10000,      // 10 seconds for network checks
     triggering: 5000,            // 5 seconds for gate trigger
     waitingForRelayClose: 15000, // 15 seconds for relay completion
     errorRecovery: 3000          // 3 seconds before auto-recovery
@@ -176,12 +132,6 @@ export const DEFAULT_STATE_MACHINE_CONFIG: StateMachineConfig = {
     maxAttempts: 3,
     backoffMultiplier: 2,
     baseDelay: 1000
-  },
-  
-  reachability: {
-    initialDelay: 1000,
-    checkInterval: 30000,
-    timeoutPerCheck: 3000
   }
 };
 
@@ -193,7 +143,7 @@ export function isValidTransition(
   from: GateState, 
   to: GateState, 
   action: GateAction,
-  context?: NetworkOperationContext
+  _context?: NetworkOperationContext
 ): boolean {
   const validTransitions = STATE_TRANSITIONS[from];
   if (!validTransitions) return false;
@@ -201,12 +151,6 @@ export function isValidTransition(
   const expectedTarget = validTransitions[action];
   if (!expectedTarget) return false;
   
-  // For reachabilityResult action, the target depends on the result
-  if (action === 'reachabilityResult' && context) {
-    // This would need actual context evaluation
-    // For now, allow both ready and noNetwork as valid targets
-    return to === 'ready' || to === 'noNetwork';
-  }
   
   return expectedTarget === to;
 }
@@ -218,7 +162,7 @@ export function isValidTransition(
 export function getNextState(
   currentState: GateState,
   action: GateAction,
-  context?: NetworkOperationContext
+  _context?: NetworkOperationContext
 ): GateState | null {
   const validTransitions = STATE_TRANSITIONS[currentState];
   if (!validTransitions) return null;
@@ -226,12 +170,6 @@ export function getNextState(
   const nextState = validTransitions[action];
   if (!nextState) return null;
   
-  // Handle conditional transitions
-  if (action === 'reachabilityResult' && context) {
-    // Implement actual reachability logic here
-    // For now, return the configured next state
-    return nextState;
-  }
   
   return nextState;
 }
@@ -269,8 +207,6 @@ export function canRetryFromState(state: GateState): boolean {
  */
 export function getStateTimeout(state: GateState, config = DEFAULT_STATE_MACHINE_CONFIG): number | null {
   switch (state) {
-    case 'checkingNetwork':
-      return config.timeouts.checkingNetwork;
     case 'triggering':
       return config.timeouts.triggering;
     case 'waitingForRelayClose':

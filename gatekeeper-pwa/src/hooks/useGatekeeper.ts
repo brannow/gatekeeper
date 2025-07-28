@@ -1,15 +1,12 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useConfig } from './useConfig';
-import { useReachability } from './useReachability';
 import { useNetworkService } from './useNetworkService';
 import { useStateMachine, useButtonState } from './useStateMachine';
-import { createReachabilityTargets } from '../services/ReachabilityService';
 import { RelayState } from '../types';
 import { NetworkServiceDelegate } from '../types/network';
 
 export function useGatekeeper() {
-  const { config, stateMachineConfig, loading: configLoading, error: configError, updateReachabilityStatus } = useConfig();
-  const { reachabilityService, isOnline } = useReachability(config, stateMachineConfig);
+  const { config, loading: configLoading, error: configError } = useConfig();
 
   const [networkError, setNetworkError] = useState<string | null>(null);
   const [relayState, setRelayState] = useState<RelayState>('released');
@@ -28,23 +25,17 @@ export function useGatekeeper() {
       console.log(`[useGatekeeper] Gate triggered successfully via ${adapter.name} in ${duration}ms`);
       setNetworkError(null);
       setCurrentMethod(adapter.method);
-      const adapterType = adapter.method === 'http' ? 'esp32' : 'mqtt';
-      updateReachabilityStatus(adapterType, 'reachable');
     },
     onTriggerFailure: (adapter, error) => {
       const adapterName = adapter ? adapter.name : 'Unknown adapter';
       console.error(`[useGatekeeper] Gate trigger failed via ${adapterName}:`, error.message);
       setNetworkError(error.message);
       setCurrentMethod(null);
-      if (adapter) {
-        const adapterType = adapter.method === 'http' ? 'esp32' : 'mqtt';
-        updateReachabilityStatus(adapterType, 'unreachable');
-      }
     },
     onConnectionTest: (adapter, success, duration) => {
       console.log(`[useGatekeeper] Connection test for ${adapter.name}: ${success ? 'passed' : 'failed'} in ${duration}ms`);
     }
-  }), [updateReachabilityStatus]);
+  }), []);
 
   const networkService = useNetworkService(config, networkDelegate);
 
@@ -64,27 +55,6 @@ export function useGatekeeper() {
     enableLogging: true,
   });
 
-  const performReachabilityCheck = useCallback(async () => {
-    if (!reachabilityService || !config) {
-      stateMachine.transition('reachabilityResult', { error: 'No reachability service or not configured' });
-      return;
-    }
-
-    try {
-      const targets = createReachabilityTargets(config.esp32, config.mqtt);
-      const results = await reachabilityService.testTargets(targets);
-      const hasReachable = results.some(r => r.isReachable);
-
-      if (hasReachable) {
-        stateMachine.transition('reachabilityResult');
-      } else {
-        stateMachine.transition('reachabilityResult', { error: 'No reachable targets' });
-      }
-    } catch (err) {
-      console.error('[useGatekeeper] Reachability check failed:', err);
-      stateMachine.transition('reachabilityResult', { error: err instanceof Error ? err.message : 'Reachability check failed' });
-    }
-  }, [reachabilityService, config, stateMachine]);
 
   const performGateTrigger = useCallback(async () => {
     if (!networkService) {
@@ -111,34 +81,26 @@ export function useGatekeeper() {
   }, [networkService, stateMachine]);
 
   useEffect(() => {
-    if (stateMachine.currentState === 'checkingNetwork') {
-      performReachabilityCheck();
-    } else if (stateMachine.currentState === 'triggering') {
+    if (stateMachine.currentState === 'triggering') {
       performGateTrigger();
     }
-  }, [stateMachine.currentState, performReachabilityCheck, performGateTrigger]);
+  }, [stateMachine.currentState, performGateTrigger]);
 
   const handleTrigger = useCallback(() => {
     if (stateMachine.currentState === 'ready') {
-      stateMachine.transition('configChanged');
-    } else if ([ 'noNetwork', 'timeout', 'error' ].includes(stateMachine.currentState)) {
+      stateMachine.transition('userPressed');
+    } else if (['timeout', 'error'].includes(stateMachine.currentState)) {
       stateMachine.retry();
     }
   }, [stateMachine]);
 
   const buttonState = useButtonState(stateMachine, isConfigured);
 
-  const displayStatus = useMemo(() => {
-    if (!isConfigured) return 'unconfigured';
-    if (!isOnline) return 'offline';
-    return 'online';
-  }, [isConfigured, isOnline]);
 
   return {
     config,
     loading: configLoading,
     error: configError,
-    displayStatus,
     networkError,
     relayState,
     stateMachine,

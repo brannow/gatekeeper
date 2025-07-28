@@ -6,7 +6,6 @@ const TriggerButton: React.FC = () => {
     config,
     loading,
     error,
-    displayStatus,
     networkError,
     relayState,
     stateMachine,
@@ -86,32 +85,19 @@ const TriggerButton: React.FC = () => {
 
         {networkError && <div className="error-message">{networkError}</div>}
 
-        <div className="pwa-status">
-          <div className="pwa-indicators">
-            <div className="offline-status">
-              <span className="status-label">Status:</span>
-              <span className={`status-indicator ${displayStatus}`}>
-                <span className="status-dot"></span>
-                {displayStatus.charAt(0).toUpperCase() + displayStatus.slice(1)}
-              </span>
-            </div>
-          </div>
-        </div>
 
         <div className="config-display">
           <div className="network-status">
             <div className="network-method">
               <span className="method-label">ESP32:</span>
-              <span className={`status-indicator esp32 ${config?.esp32.reachabilityStatus}`}>
-                <span className="status-dot"></span>
+              <span className="status-indicator esp32">
                 {config?.esp32.host}:{config?.esp32.port}
               </span>
             </div>
             {config?.mqtt.host && (
               <div className="network-method">
                 <span className="method-label">MQTT:</span>
-                <span className={`status-indicator mqtt ${config.mqtt.reachabilityStatus}`}>
-                  <span className="status-dot"></span>
+                <span className="status-indicator mqtt">
                   {config.mqtt.host}:{config.mqtt.port}{config.mqtt.ssl ? ' (SSL)' : ''}
                 </span>
               </div>

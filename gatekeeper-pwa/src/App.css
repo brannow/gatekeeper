@@ -1084,20 +1084,6 @@ body {
   transition: background-color 0.3s ease;
 }
 
-/* Status indicator colors */
-.status-indicator.reachable .status-dot {
-  background: var(--color-success);
-  box-shadow: 0 0 0 2px var(--shadow-light);
-}
-
-.status-indicator.unreachable .status-dot {
-  background: var(--color-error);
-  box-shadow: 0 0 0 2px var(--shadow-light);
-}
-
-.status-indicator.unknown .status-dot {
-  background: var(--color-gray);
-}
 
 .active-method {
   display: flex;
@@ -1382,60 +1368,7 @@ body {
   border: 1px solid var(--border-primary);
 }
 
-.reachability-status.reachable {
-  background: var(--color-success-light);
-  border-color: var(--color-success);
-  color: var(--text-success);
-}
 
-.reachability-status.unreachable {
-  background: var(--bg-tertiary);
-  border-color: var(--color-error);
-  color: var(--text-error);
-}
-
-.reachability-status.unknown {
-  background: var(--bg-secondary);
-  border-color: var(--color-gray);
-  color: var(--text-secondary);
-}
-
-.reachability-status.testing {
-  background: var(--bg-tertiary);
-  border-color: var(--color-warning);
-  color: var(--color-warning-light);
-}
-
-.reachability-status .status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--color-gray);
-}
-
-.reachability-status.reachable .status-dot {
-  background: var(--color-success);
-  animation: pulse-green 2s infinite;
-}
-
-.reachability-status.unreachable .status-dot {
-  background: var(--color-error);
-}
-
-.reachability-status.unknown .status-dot {
-  background: var(--color-gray);
-}
-
-.reachability-status.testing .status-dot {
-  background: var(--color-warning);
-  animation: pulse-orange 1s infinite;
-}
-
-@keyframes pulse-orange {
-  0% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.6; transform: scale(1.1); }
-  100% { opacity: 1; transform: scale(1); }
-}
 
 .status-text {
   font-weight: 500;
@@ -1853,30 +1786,6 @@ body {
 
 /* PWA-specific styles (Phase 4) */
 
-/* PWA Status Display */
-.pwa-status {
-  margin: 20px 0;
-  padding: 16px;
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.pwa-indicators {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  align-items: center;
-}
-
-.offline-status,
-.queue-status,
-.install-status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-}
 
 .status-label {
   font-weight: 500;

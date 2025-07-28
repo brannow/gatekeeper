@@ -29,7 +29,7 @@ docker exec gatekeeper-node npm install          # Install dependencies
 - **NEVER USE** `npm run dev` - it locks up with no output
 
 ## ✅ Project Status: Production Ready
-**Phase 5 COMPLETED** - Full-featured PWA with comprehensive theme system
+**Phase 6 COMPLETED** - Simplified PWA with direct adapter chain execution
 
 ### Core Features ✅
 - React + TypeScript + Vite foundation
@@ -38,10 +38,11 @@ docker exec gatekeeper-node npm install          # Install dependencies
 - PWA: Service worker, offline queue, installable
 - Theme system: Bright/Dark/System with 80+ CSS variables
 - WCAG 2.1 AA+ accessibility compliance
+- Simplified state machine (5 states) without reachability checking
 
 ### Network Flow
-Button → HTTP POST → ESP32 /trigger → 200 OK → Gate activates
-If HTTP fails → MQTT WSS fallback → Gate control topic
+Button → Try HTTP Adapter → If fails, try MQTT Adapter → Success/Error
+No reachability checking - direct adapter execution for faster response
 
 ## Project Structure
 ```
@@ -60,7 +61,6 @@ gatekeeper-pwa/
 │   │   ├── ValidationService.ts # Centralized validation with warnings
 │   │   ├── MqttService.ts       # MQTT service for WSS connections
 │   │   ├── NetworkService.ts    # Core network service logic (used by hooks)
-│   │   ├── ReachabilityService.ts # Core network reachability logic (used by hooks)
 │   │   ├── InstallService.ts    # PWA installation management with platform detection
 │   │   └── OfflineService.ts    # Offline queue and sync management with service worker
 │   ├── network/
@@ -69,7 +69,6 @@ gatekeeper-pwa/
 │   ├── hooks/
 │   │   ├── useConfig.ts         # Enhanced config hook with PWA and theme features
 │   │   ├── useStateMachine.ts   # Generic state machine hook with timeout fixes
-│   │   ├── useReachability.ts   # Manages ReachabilityService lifecycle
 │   │   ├── useNetworkService.ts # Manages NetworkService lifecycle
 │   │   ├── useTheme.ts          # Theme detection and management hook (Phase 5)
 │   │   └── useGatekeeper.ts     # Main orchestration hook (ARCHITECTURAL CORE)
@@ -110,6 +109,7 @@ gatekeeper-pwa/
 
 ### Hook Composition
 - `useGatekeeper` (orchestration) → `useConfig` + `useNetworkService` + `useStateMachine`
+- **Simplified**: Removed reachability checking for faster, more direct operation
 
 ## 🔧 Key Components
 
@@ -137,7 +137,7 @@ gatekeeper-pwa/
 - **`MqttAdapter`** (`src/adapters/MqttAdapter.ts`): MQTT over WSS fallback
 
 ### Core Types (`src/types/index.ts`)
-- **GateState**: 'ready' | 'triggering' 
+- **GateState**: 'ready' | 'triggering' | 'waitingForRelayClose' | 'timeout' | 'error'
 - **AppConfig**: ESP32 + MQTT + Theme configuration structure
 - **ThemeMode**: 'bright' | 'dark' | 'system'
 - **ValidationResult**: Error/warning reporting
@@ -230,6 +230,8 @@ gatekeeper-pwa/
 - **Theme System**: 80+ CSS variables, system detection, accessibility compliant
 - **Network Reliability**: HTTP → MQTT fallback chain with timeout management
 - **Clean Separation**: UI components have NO business logic (hooks handle everything)
+- **Simplified State Machine**: Removed reachability checking (7 → 5 states) for faster response
 
-### Critical Architecture Fix Applied
-**INFINITE RE-RENDER LOOP RESOLUTION**: Fixed by moving all event handling from `TriggerButton` component to `useGatekeeper` hook with proper memoization (`useMemo`/`useCallback`) and stable object references.
+### Critical Architecture Fixes Applied
+1. **INFINITE RE-RENDER LOOP RESOLUTION**: Fixed by moving all event handling from `TriggerButton` component to `useGatekeeper` hook with proper memoization (`useMemo`/`useCallback`) and stable object references.
+2. **REACHABILITY REMOVAL**: Eliminated complex network checking system for direct adapter execution, reducing ~500 lines of code and improving button response time.

@@ -105,7 +105,6 @@ gatekeeper-pwa/
 │   │   ├── ValidationService.ts # Centralized validation with warnings
 │   │   ├── MqttService.ts       # MQTT service for WSS connections
 │   │   ├── NetworkService.ts    # Core network service logic (used by hooks)
-│   │   ├── ReachabilityService.ts # Core network reachability logic (used by hooks)
 │   │   ├── InstallService.ts    # PWA installation management with platform detection
 │   │   └── OfflineService.ts    # Offline queue and sync management with service worker
 │   ├── network/
@@ -114,7 +113,6 @@ gatekeeper-pwa/
 │   ├── hooks/
 │   │   ├── useConfig.ts         # Enhanced config hook with PWA and theme features
 │   │   ├── useStateMachine.ts   # Generic state machine hook (FIXED timeouts)
-│   │   ├── useReachability.ts   # Manages ReachabilityService lifecycle
 │   │   ├── useNetworkService.ts # Manages NetworkService lifecycle
 │   │   ├── useTheme.ts          # Theme detection and management hook (Phase 5)
 │   │   └── useGatekeeper.ts     # Main orchestration hook (ARCHITECTURAL CORE)
@@ -197,7 +195,6 @@ void setup() {
 - ✅ Export/import for complete configuration including state machine settings
 
 ### Network & Reachability
-- ✅ Network reachability service implementation (`src/services/ReachabilityService.ts`)
 - ✅ Continuous network monitoring with configurable intervals
 - ✅ Network state coordination utilities (`src/utils/NetworkStateManager.ts`)
 - ✅ Integration with existing adapter chain pattern

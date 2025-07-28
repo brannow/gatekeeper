@@ -278,7 +278,6 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 100vh;
   height: 100dvh; /* Use dynamic viewport height */
   width: 100vw;
   overflow-x: hidden;
@@ -374,7 +373,7 @@ button.config-button {
   width: auto !important;
   height: auto !important;
   border-radius: 4px !important;
-  border: 1px solid var(--border-light);
+  border: 1px solid var(--border-secondary);
   aspect-ratio: unset !important;
   
   /* Remove iOS button styling */
@@ -453,7 +452,7 @@ button.config-button {
 .install-button:hover {
   background: var(--color-secondary-hover);
   border-color: var(--color-secondary-hover);
-  box-shadow: 0 4px 12px var(--shadow-strong);
+  box-shadow: 0 4px 12px var(--shadow-heavy);
   transform: translateY(-1px);
 }
 
@@ -1567,7 +1566,6 @@ button.config-button {
   
   .container {
     height: auto;
-    min-height: 100vh;
     min-height: 100dvh;
     overflow-y: auto; /* Enable scrolling only when needed */
     justify-content: flex-start;
@@ -1663,7 +1661,7 @@ button.config-button {
 }
 
 /* High contrast mode support */
-@media (prefers-contrast: high) {
+@media (prefers-contrast: more) {
   .config-button {
     border: 2px solid var(--text-white);
   }

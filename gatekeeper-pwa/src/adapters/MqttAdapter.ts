@@ -4,6 +4,7 @@ import { MqttService } from '../services/MqttService';
 import { NetworkErrorHandler } from '../network/NetworkErrorHandler';
 import { NETWORK_TIMEOUTS, MQTT_TOPICS } from '../network/NetworkConfig';
 import { validationService } from '../services/ValidationService';
+import { configManager } from '../services/ConfigManager';
 
 /**
  * MQTT network adapter implementation
@@ -30,6 +31,19 @@ export class MqttAdapter implements IMqttAdapter {
 
   constructor(public config: MQTTConfig) {
     this.service = new MqttService(config);
+  }
+
+  /**
+   * Check if adapter is currently disabled by asking ConfigManager directly
+   */
+  private async isDisabled(): Promise<boolean> {
+    try {
+      const currentConfig = await configManager.loadConfig();
+      return currentConfig.mqtt.disabled === true;
+    } catch (error) {
+      console.error('[MqttAdapter] Failed to check disabled state:', error);
+      return false; // Default to enabled if we can't check
+    }
   }
 
   /**
@@ -141,6 +155,12 @@ export class MqttAdapter implements IMqttAdapter {
    * @returns Promise<boolean> - true if gate was triggered successfully
    */
   async triggerGate(timestamp: string): Promise<boolean> {
+    // Check if adapter is disabled at runtime
+    if (await this.isDisabled()) {
+      console.log('[MqttAdapter] Adapter is disabled, skipping trigger');
+      return false;
+    }
+
     const startTime = Date.now();
     
     // Prevent multiple simultaneous triggers
@@ -241,6 +261,12 @@ export class MqttAdapter implements IMqttAdapter {
    * @returns Promise<boolean> - true if broker is reachable
    */
   async testConnection(): Promise<boolean> {
+    // Check if adapter is disabled at runtime
+    if (await this.isDisabled()) {
+      console.log('[MqttAdapter] Adapter is disabled, skipping connection test');
+      return false;
+    }
+
     const startTime = Date.now();
     
     try {
@@ -416,5 +442,5 @@ export class MqttAdapter implements IMqttAdapter {
  * @returns Configured MqttAdapter instance
  */
 export function createMqttAdapter(config: MQTTConfig): MqttAdapter {
-  return new MqttAdapter(config);
+  return new MqttAdapter(config);  
 }

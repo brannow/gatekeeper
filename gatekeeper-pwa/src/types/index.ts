@@ -104,6 +104,7 @@ export interface NetworkOperationContext {
 export interface ESP32Config {
   host: string;
   port: number;
+  disabled?: boolean;  // If missing or false, adapter is active. Only disabled if explicitly true.
 }
 
 export interface MQTTConfig {
@@ -112,6 +113,7 @@ export interface MQTTConfig {
   username?: string;
   password?: string;
   ssl: boolean;
+  disabled?: boolean;  // If missing or false, adapter is active. Only disabled if explicitly true.
 }
 
 /**

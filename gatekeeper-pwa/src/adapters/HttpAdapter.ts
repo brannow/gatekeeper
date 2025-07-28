@@ -3,6 +3,7 @@ import type { ESP32Config } from '../types';
 import { validationService } from '../services/ValidationService';
 import { NetworkErrorHandler } from '../network/NetworkErrorHandler';
 import { NETWORK_TIMEOUTS, HTTP_ENDPOINTS, HTTP_REQUEST } from '../network/NetworkConfig';
+import { configManager } from '../services/ConfigManager';
 
 /**
  * HTTP network adapter implementation
@@ -17,6 +18,19 @@ export class HttpAdapter implements IHttpAdapter {
   private currentAbortController: AbortController | null = null;
 
   constructor(public config: ESP32Config) {}
+
+  /**
+   * Check if adapter is currently disabled by asking ConfigManager directly
+   */
+  private async isDisabled(): Promise<boolean> {
+    try {
+      const currentConfig = await configManager.loadConfig();
+      return currentConfig.esp32.disabled === true;
+    } catch (error) {
+      console.error('[HttpAdapter] Failed to check disabled state:', error);
+      return false; // Default to enabled if we can't check
+    }
+  }
 
   /**
    * Build URL from configuration and path
@@ -65,6 +79,12 @@ export class HttpAdapter implements IHttpAdapter {
    * @returns Promise<boolean> - true if gate was triggered successfully
    */
   async triggerGate(timestamp: string): Promise<boolean> {
+    // Check if adapter is disabled at runtime
+    if (await this.isDisabled()) {
+      console.log('[HttpAdapter] Adapter is disabled, skipping trigger');
+      return false;
+    }
+
     const startTime = Date.now();
     this.cancelCurrentOperation();
     this.currentAbortController = new AbortController();
@@ -116,6 +136,12 @@ export class HttpAdapter implements IHttpAdapter {
    * @returns Promise<boolean> - true if ESP32 is reachable
    */
   async testConnection(): Promise<boolean> {
+    // Check if adapter is disabled at runtime
+    if (await this.isDisabled()) {
+      console.log('[HttpAdapter] Adapter is disabled, skipping connection test');
+      return false;
+    }
+
     const startTime = Date.now();
     
     try {
@@ -159,6 +185,12 @@ export class HttpAdapter implements IHttpAdapter {
    * @returns Promise<boolean> - true if endpoint is available
    */
   async testEndpoint(endpoint: string = HTTP_ENDPOINTS.STATUS): Promise<boolean> {
+    // Check if adapter is disabled at runtime
+    if (await this.isDisabled()) {
+      console.log('[HttpAdapter] Adapter is disabled, skipping endpoint test');
+      return false;
+    }
+
     const startTime = Date.now();
     
     try {

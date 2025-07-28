@@ -6,7 +6,8 @@ import { RelayState } from '../types';
 import { NetworkServiceDelegate } from '../types/network';
 
 export function useGatekeeper() {
-  const { config, loading: configLoading, error: configError } = useConfig();
+  const configHook = useConfig();
+  const { config, loading: configLoading, error: configError } = configHook;
 
   const [networkError, setNetworkError] = useState<string | null>(null);
   const [relayState, setRelayState] = useState<RelayState>('released');
@@ -38,7 +39,10 @@ export function useGatekeeper() {
     }
   }), []);
 
-  const { networkService, cancelCurrentOperation } = useNetworkService(config, networkDelegate);
+  const { networkService, cancelCurrentOperation } = useNetworkService(
+    config, 
+    networkDelegate
+  );
 
   const stateMachine = useStateMachine({
     initialState: 'ready',

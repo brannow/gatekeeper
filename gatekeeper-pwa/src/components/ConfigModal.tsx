@@ -16,6 +16,7 @@ interface FormState {
   esp32: {
     host: string;
     port: string;
+    disabled: boolean;
   };
   mqtt: {
     host: string;
@@ -23,6 +24,7 @@ interface FormState {
     username: string;
     password: string;
     ssl: boolean;
+    disabled: boolean;
   };
   theme: ThemeMode;
 }
@@ -54,14 +56,16 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose }) => {
   const [formState, setFormState] = useState<FormState>({
     esp32: {
       host: '',
-      port: ''
+      port: '',
+      disabled: false
     },
     mqtt: {
       host: '',
       port: '',
       username: '',
       password: '',
-      ssl: false
+      ssl: false,
+      disabled: false
     },
     theme: 'system'
   });
@@ -81,7 +85,8 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose }) => {
         esp32: {
           host: config.esp32.host,
           // Only show port if host exists, otherwise empty string
-          port: config.esp32.host ? config.esp32.port.toString() : ''
+          port: config.esp32.host ? config.esp32.port.toString() : '',
+          disabled: config.esp32.disabled || false
         },
         mqtt: {
           host: config.mqtt.host,
@@ -89,7 +94,8 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose }) => {
           port: config.mqtt.host ? config.mqtt.port.toString() : '',
           username: config.mqtt.username || '',
           password: config.mqtt.password || '',
-          ssl: config.mqtt.ssl
+          ssl: config.mqtt.ssl,
+          disabled: config.mqtt.disabled || false
         },
         theme: config.theme
       });
@@ -104,14 +110,16 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose }) => {
       setFormState({
         esp32: {
           host: config.esp32.host,
-          port: config.esp32.host ? config.esp32.port.toString() : ''
+          port: config.esp32.host ? config.esp32.port.toString() : '',
+          disabled: config.esp32.disabled || false
         },
         mqtt: {
           host: config.mqtt.host,
           port: config.mqtt.host ? config.mqtt.port.toString() : '',
           username: config.mqtt.username || '',
           password: config.mqtt.password || '',
-          ssl: config.mqtt.ssl
+          ssl: config.mqtt.ssl,
+          disabled: config.mqtt.disabled || false
         },
         theme: config.theme
       });
@@ -254,7 +262,8 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose }) => {
       if (type === 'esp32') {
         const esp32Config = {
           host: formState.esp32.host.trim(),
-          port: parseInt(formState.esp32.port.trim(), 10)
+          port: parseInt(formState.esp32.port.trim(), 10),
+          disabled: formState.esp32.disabled
         };
         
         const httpAdapter = createHttpAdapter(esp32Config);
@@ -276,7 +285,8 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose }) => {
           port: parseInt(formState.mqtt.port.trim() || '1883', 10),
           username: formState.mqtt.username.trim() || undefined,
           password: formState.mqtt.password.trim() || undefined,
-          ssl: formState.mqtt.ssl
+          ssl: formState.mqtt.ssl,
+          disabled: formState.mqtt.disabled
         };
         
         const mqttAdapter = createMqttAdapter(mqttConfig);
@@ -320,15 +330,23 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose }) => {
         theme: formState.theme,
         esp32: formState.esp32.host.trim() ? {
           host: formState.esp32.host.trim(),
-          port: parseInt(formState.esp32.port.trim(), 10) || 80
-        } : config.esp32, // Keep existing ESP32 config if no host provided
+          port: parseInt(formState.esp32.port.trim(), 10) || 80,
+          disabled: formState.esp32.disabled
+        } : {
+          ...config.esp32, // Keep existing ESP32 config if no host provided
+          disabled: formState.esp32.disabled // But always update disabled flag
+        },
         mqtt: formState.mqtt.host.trim() ? {
           host: formState.mqtt.host.trim(),
           port: parseInt(formState.mqtt.port.trim(), 10) || 1883,
           username: formState.mqtt.username.trim() || undefined,
           password: formState.mqtt.password.trim() || undefined,
-          ssl: formState.mqtt.ssl
-        } : config.mqtt // Keep existing MQTT config if no host provided
+          ssl: formState.mqtt.ssl,
+          disabled: formState.mqtt.disabled
+        } : {
+          ...config.mqtt, // Keep existing MQTT config if no host provided
+          disabled: formState.mqtt.disabled // But always update disabled flag
+        }
       };
 
       console.log('[ConfigModal] Unified config update:', configUpdate);
@@ -359,14 +377,16 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose }) => {
     setFormState({
       esp32: {
         host: config.esp32.host,
-        port: config.esp32.port.toString()
+        port: config.esp32.port.toString(),
+        disabled: config.esp32.disabled || false
       },
       mqtt: {
         host: config.mqtt.host,
         port: config.mqtt.port.toString(),
         username: config.mqtt.username || '',
         password: config.mqtt.password || '',
-        ssl: config.mqtt.ssl
+        ssl: config.mqtt.ssl,
+        disabled: config.mqtt.disabled || false
       },
       theme: config.theme
     });
@@ -441,6 +461,21 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose }) => {
               <div className="section-header">
                 <h3>ESP32 HTTP Settings</h3>
               </div>
+
+              <div className="form-group checkbox-group">
+                <label className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={!formState.esp32.disabled}
+                    onChange={(e) => handleInputChange('esp32', 'disabled', !e.target.checked)}
+                    disabled={isSaving || loading}
+                  />
+                  <span className="checkbox-text">Enable ESP32 HTTP Adapter</span>
+                </label>
+                <div className="adapter-help-text">
+                  When disabled, this adapter will not be used for gate trigger attempts
+                </div>
+              </div>
               
               <div className="form-group">
                 <label htmlFor="esp32-host">Host</label>
@@ -509,6 +544,21 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose }) => {
             <div className="config-section">
               <div className="section-header">
                 <h3>MQTT over WebSocket Settings</h3>
+              </div>
+
+              <div className="form-group checkbox-group">
+                <label className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={!formState.mqtt.disabled}
+                    onChange={(e) => handleInputChange('mqtt', 'disabled', !e.target.checked)}
+                    disabled={isSaving || loading}
+                  />
+                  <span className="checkbox-text">Enable MQTT WebSocket Adapter</span>
+                </label>
+                <div className="adapter-help-text">
+                  When disabled, this adapter will not be used for gate trigger attempts
+                </div>
               </div>
               
               <div className="form-group">

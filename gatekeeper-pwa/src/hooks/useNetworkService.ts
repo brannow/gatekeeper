@@ -5,7 +5,10 @@ import { createMqttAdapter } from '../adapters/MqttAdapter';
 import { AppConfig } from '../types';
 import { NetworkServiceDelegate } from '../types/network';
 
-export function useNetworkService(config: AppConfig | null, delegate: NetworkServiceDelegate) {
+export function useNetworkService(
+  config: AppConfig | null, 
+  delegate: NetworkServiceDelegate
+) {
   const [networkService, setNetworkService] = useState<NetworkService | null>(null);
   const delegateRef = useRef<NetworkServiceDelegate>(delegate);
   
@@ -23,11 +26,13 @@ export function useNetworkService(config: AppConfig | null, delegate: NetworkSer
     service.delegate = delegateRef.current;
 
     const initialize = async () => {
+      // Add HTTP adapter (always add if configured, adapter checks disabled at runtime via ConfigManager)
       if (config.esp32.host && config.esp32.port) {
         const httpAdapter = createHttpAdapter(config.esp32);
         await service.addAdapter(httpAdapter);
       }
 
+      // Add MQTT adapter (always add if configured, adapter checks disabled at runtime via ConfigManager)
       if (config.mqtt.host && config.mqtt.port) {
         const mqttAdapter = createMqttAdapter(config.mqtt);
         await service.addAdapter(mqttAdapter);
@@ -43,7 +48,7 @@ export function useNetworkService(config: AppConfig | null, delegate: NetworkSer
       setNetworkService(null);
       service.cleanup();
     };
-  }, [config]); // Only depend on config, not delegate
+  }, [config?.esp32?.host, config?.esp32?.port, config?.mqtt?.host, config?.mqtt?.port]); // Only depend on connection details, not disabled flags
 
   // Update delegate when service exists
   useEffect(() => {

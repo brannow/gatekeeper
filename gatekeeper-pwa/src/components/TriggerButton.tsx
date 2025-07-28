@@ -40,7 +40,7 @@ const TriggerButton: React.FC = () => {
       <button
         className={`trigger-button ${stateMachine.currentState}`}
         onClick={handleTrigger}
-        disabled={buttonState.isDisabled}
+        disabled={buttonState.isDisabled || stateMachine.isTransitional}
         aria-label={buttonState.title}
       >
         {buttonState.title}

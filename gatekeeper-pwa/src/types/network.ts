@@ -30,9 +30,10 @@ export interface NetworkAdapter {
   
   /**
    * Triggers the gate using this adapter
+   * @param timestamp - Single timestamp for command deduplication
    * @returns Promise<boolean> - true if successful, false otherwise
    */
-  triggerGate(): Promise<boolean>;
+  triggerGate(timestamp: string): Promise<boolean>;
   
   /**
    * Tests connection using this adapter
@@ -51,6 +52,12 @@ export interface NetworkAdapter {
    * Called when adapter is removed or app shuts down
    */
   cleanup(): Promise<void>;
+  
+  /**
+   * Cancels any ongoing operation
+   * Called when adapter needs to be stopped before trying next adapter
+   */
+  cancelCurrentOperation?(): void;
 }
 
 /**
@@ -201,9 +208,10 @@ export interface NetworkService {
   /**
    * Trigger the gate using adapter chain
    * Tries adapters in sequence until one succeeds or all fail
+   * @param timestamp - Single timestamp for command deduplication
    * @returns Promise<boolean> - true if any adapter succeeded
    */
-  triggerGate(): Promise<boolean>;
+  triggerGate(timestamp: string): Promise<boolean>;
   
   /**
    * Test connection for all adapters

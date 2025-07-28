@@ -127,7 +127,7 @@ export class NetworkErrorHandler {
    * Check if error is a timeout error
    */
   private static isTimeoutError(error: Error, context: ErrorContext): boolean {
-    const errorMessage = error.message.toLowerCase();
+    const errorMessage = (error.message || '').toLowerCase();
     const errorName = error.name;
     
     // Check error name for AbortError (fetch timeout)

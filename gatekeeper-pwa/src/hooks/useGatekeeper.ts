@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useConfig } from './useConfig';
 import { useNetworkService } from './useNetworkService';
 import { useStateMachine, useButtonState } from './useStateMachine';
@@ -11,6 +11,7 @@ export function useGatekeeper() {
   const [networkError, setNetworkError] = useState<string | null>(null);
   const [relayState, setRelayState] = useState<RelayState>('released');
   const [currentMethod, setCurrentMethod] = useState<'http' | 'mqtt' | null>(null);
+  const triggerInProgress = useRef(false);
 
   const isConfigured = useMemo(() => 
     Boolean(
@@ -37,12 +38,18 @@ export function useGatekeeper() {
     }
   }), []);
 
-  const networkService = useNetworkService(config, networkDelegate);
+  const { networkService, cancelCurrentOperation } = useNetworkService(config, networkDelegate);
 
   const stateMachine = useStateMachine({
     initialState: 'ready',
     onStateChange: (from, to, action) => {
       console.log(`[useGatekeeper] State transition: ${from} -> ${to} (${action})`);
+      
+      // Reset timestamp when returning to ready state
+      if (to === 'ready' && from !== 'ready') {
+        console.log(`[useGatekeeper] Resetting on transition to ready`);
+        triggerInProgress.current = false;
+      }
     },
     onTimeout: (state) => {
       console.warn(`[useGatekeeper] State ${state} timed out`);
@@ -56,41 +63,59 @@ export function useGatekeeper() {
   });
 
 
-  const performGateTrigger = useCallback(async () => {
+  const performGateTrigger = useCallback(async (timestamp: string) => {
     if (!networkService) {
-      stateMachine.transition('requestComplete', { error: 'No network service available' });
+      void stateMachine.transition('requestComplete', { error: 'No network service available' });
       return;
     }
 
     try {
-      const success = await networkService.triggerGate();
+      console.log(`[useGatekeeper] Starting gate trigger with timestamp: ${timestamp}`);
+      const success = await networkService.triggerGate(timestamp);
       if (success) {
         setRelayState('activated');
-        stateMachine.transition('relayChanged');
+        void stateMachine.transition('relayChanged');
         setTimeout(() => {
           setRelayState('released');
-          stateMachine.transition('relayChanged');
+          void stateMachine.transition('relayChanged');
         }, 2000);
-      } else {
-        stateMachine.transition('requestComplete', { error: 'Gate trigger failed' });
+      } else if (stateMachine.currentState === 'triggering') {
+        void stateMachine.transition('requestComplete', { error: 'Gate trigger failed' });
       }
     } catch (err) {
       console.error('[useGatekeeper] Gate trigger failed:', err);
-      stateMachine.transition('requestComplete', { error: err instanceof Error ? err.message : 'Gate trigger failed' });
+      if (stateMachine.currentState === 'triggering') {
+        void stateMachine.transition('requestComplete', { error: err instanceof Error ? err.message : 'Gate trigger failed' });
+      }
     }
   }, [networkService, stateMachine]);
 
   useEffect(() => {
-    if (stateMachine.currentState === 'triggering') {
-      performGateTrigger();
+    if (stateMachine.currentState === 'triggering' && !triggerInProgress.current) {
+      triggerInProgress.current = true;
+      const timestamp = Date.now().toString();
+      console.log(`[useGatekeeper] Generated timestamp for gate trigger: ${timestamp}`);
+      void performGateTrigger(timestamp);
     }
-  }, [stateMachine.currentState, performGateTrigger]);
+
+    return () => {
+      if (cancelCurrentOperation) {
+        cancelCurrentOperation();
+      }
+    };
+  }, [stateMachine.currentState, performGateTrigger, networkService, cancelCurrentOperation]);
 
   const handleTrigger = useCallback(() => {
+    // Prevent clicks during transitional states
+    if (stateMachine.isTransitional) {
+      console.log(`[useGatekeeper] Ignoring click during transitional state: ${stateMachine.currentState}`);
+      return;
+    }
+    
     if (stateMachine.currentState === 'ready') {
-      stateMachine.transition('userPressed');
+      void stateMachine.transition('userPressed');
     } else if (['timeout', 'error'].includes(stateMachine.currentState)) {
-      stateMachine.retry();
+      void stateMachine.retry();
     }
   }, [stateMachine]);
 

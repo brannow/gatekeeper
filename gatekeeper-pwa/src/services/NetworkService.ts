@@ -90,9 +90,10 @@ export class NetworkService implements INetworkService {
   /**
    * Trigger the gate using adapter chain pattern
    * Phase 4: Enhanced with offline queueing support
+   * @param timestamp - Single timestamp for command deduplication
    * @returns Promise<boolean> - true if any adapter succeeded
    */
-  async triggerGate(): Promise<boolean> {
+  async triggerGate(timestamp: string): Promise<boolean> {
     if (this._isRunning) {
       console.warn('[NetworkService] triggerGate ignored - already running');
       return false;
@@ -128,12 +129,11 @@ export class NetworkService implements INetworkService {
       }
     }
 
-    console.log(`[NetworkService] Starting gate trigger with ${this._adapters.length} adapters`);
+    console.log(`[NetworkService] Starting gate trigger with ${this._adapters.length} adapters using timestamp: ${timestamp}`);
     this._isRunning = true;
     this.currentIndex = 0;
 
-
-    return this.tryNextAdapter();
+    return this.tryNextAdapter(timestamp);
   }
 
   /**
@@ -246,6 +246,15 @@ export class NetworkService implements INetworkService {
     await this.cleanup();
   }
 
+  /**
+   * Cancel any ongoing operations across all adapters
+   */
+  cancelCurrentOperation(): void {
+    console.log('[NetworkService] Cancelling current operations across all adapters');
+    this._adapters.forEach(adapter => adapter.cancelCurrentOperation?.());
+    this.stopCurrentOperation();
+  }
+
 
 
 
@@ -266,7 +275,7 @@ export class NetworkService implements INetworkService {
    * Try the next adapter in the chain
    * @returns Promise<boolean> - true if adapter succeeded
    */
-  private async tryNextAdapter(): Promise<boolean> {
+  private async tryNextAdapter(timestamp: string): Promise<boolean> {
     // Clean up previous adapter state
     this.clearTimeout();
     
@@ -292,13 +301,13 @@ export class NetworkService implements INetworkService {
     // Set timeout for this adapter
     this.triggerTimeout = setTimeout(() => {
       console.warn(`[NetworkService] Adapter ${adapter.name} timed out after ${this.timeoutMs}ms`);
-      this.handleAdapterTimeout();
+      this.handleAdapterTimeout(timestamp);
     }, this.timeoutMs);
 
     const startTime = Date.now();
 
     try {
-      const success = await adapter.triggerGate();
+      const success = await adapter.triggerGate(timestamp);
       const duration = Date.now() - startTime;
       
       this.clearTimeout();
@@ -311,13 +320,17 @@ export class NetworkService implements INetworkService {
       } else {
         console.warn(`[NetworkService] Adapter ${adapter.name} failed in ${duration}ms`);
         
+        // Cancel the failed adapter before trying next
+        console.log(`[NetworkService] Cancelling failed adapter: ${adapter.name}`);
+        adapter.cancelCurrentOperation?.();
+        
         const error = createNetworkError('network', `Adapter ${adapter.name} returned false`, adapter.method);
         
         this.delegate?.onTriggerFailure(adapter, error);
         
         // Try next adapter
         this.currentIndex++;
-        return this.tryNextAdapter();
+        return this.tryNextAdapter(timestamp);
       }
       
     } catch (error) {
@@ -326,19 +339,23 @@ export class NetworkService implements INetworkService {
       
       console.error(`[NetworkService] Adapter ${adapter.name} threw error in ${duration}ms:`, error);
       
+      // Cancel the errored adapter before trying next
+      console.log(`[NetworkService] Cancelling errored adapter: ${adapter.name}`);
+      adapter.cancelCurrentOperation?.();
+      
       this.clearTimeout();
       this.delegate?.onTriggerFailure(adapter, networkError);
       
       // Try next adapter
       this.currentIndex++;
-      return this.tryNextAdapter();
+      return this.tryNextAdapter(timestamp);
     }
   }
 
   /**
    * Handle adapter timeout
    */
-  private handleAdapterTimeout(): void {
+  private handleAdapterTimeout(timestamp: string): void {
     if (this._currentAdapter) {
       const error = createNetworkError(
         'timeout', 
@@ -346,12 +363,17 @@ export class NetworkService implements INetworkService {
         this._currentAdapter.method
       );
       
+      console.log(`[NetworkService] Cancelling timed out adapter: ${this._currentAdapter.name}`);
+      
+      // Cancel the current adapter's operation before trying next
+      this._currentAdapter.cancelCurrentOperation?.();
+      
       this.delegate?.onTriggerFailure(this._currentAdapter, error);
     }
     
-    // Try next adapter
+    // Try next adapter only after cancelling current one
     this.currentIndex++;
-    this.tryNextAdapter();
+    this.tryNextAdapter(timestamp);
   }
 
 

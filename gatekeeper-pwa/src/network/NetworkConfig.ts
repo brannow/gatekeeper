@@ -70,8 +70,6 @@ export const MQTT_TOPICS = {
  * MQTT connection settings
  */
 export const MQTT_CONNECTION = {
-  KEEP_ALIVE: 60,         // 60 seconds keep-alive
-  PING_INTERVAL: 30000,   // 30 seconds ping interval
   MAX_RECONNECT_ATTEMPTS: 3,
   WEBSOCKET_PROTOCOL: 'mqtt',
   CLIENT_ID_PREFIX: 'gate-pwa'

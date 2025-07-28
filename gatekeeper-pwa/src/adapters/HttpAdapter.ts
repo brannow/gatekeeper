@@ -13,6 +13,8 @@ export class HttpAdapter implements IHttpAdapter {
   readonly method = 'http' as const;
   readonly timeout = NETWORK_TIMEOUTS.HTTP;
   readonly name = 'ESP32 HTTP Adapter';
+  
+  private currentAbortController: AbortController | null = null;
 
   constructor(public config: ESP32Config) {}
 
@@ -38,38 +40,54 @@ export class HttpAdapter implements IHttpAdapter {
   }
 
   /**
-   * Clean up adapter resources
-   * HTTP adapter is stateless, so cleanup is minimal
+   * Clean up adapter resources and cancel any ongoing operations
    */
   async cleanup(): Promise<void> {
     console.log('[HttpAdapter] Cleaning up...');
-    // HTTP adapter has no persistent connections to clean up
+    this.cancelCurrentOperation();
     console.log('[HttpAdapter] Cleanup completed');
   }
 
   /**
+   * Cancel any ongoing HTTP operation
+   */
+  cancelCurrentOperation(): void {
+    if (this.currentAbortController) {
+      console.log('[HttpAdapter] Cancelling ongoing HTTP operation');
+      this.currentAbortController.abort('Operation cancelled by adapter cleanup');
+      this.currentAbortController = null;
+    }
+  }
+
+  /**
    * Trigger the gate using HTTP POST
-   * Direct implementation without HttpService wrapper
+   * @param timestamp - Single timestamp for command deduplication
    * @returns Promise<boolean> - true if gate was triggered successfully
    */
-  async triggerGate(): Promise<boolean> {
+  async triggerGate(timestamp: string): Promise<boolean> {
     const startTime = Date.now();
-    
+    this.cancelCurrentOperation();
+    this.currentAbortController = new AbortController();
+
     try {
-      // Validate configuration using centralized validation
       validationService.validateESP32ConfigStrict(this.config);
-      
+
       const url = this.buildUrl(HTTP_ENDPOINTS.TRIGGER);
-      console.log(`[HttpAdapter] Triggering gate: ${url}`);
-      
+      console.log(`[HttpAdapter] Triggering gate: ${url} with timestamp: ${timestamp}`);
+
       const response = await fetch(url, {
         method: 'POST',
-        headers: HTTP_REQUEST.HEADERS,
-        signal: AbortSignal.timeout(this.timeout)
+        headers: {
+          ...HTTP_REQUEST.HEADERS,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ timestamp }),
+        signal: this.currentAbortController.signal
       });
-      
+
       const duration = Date.now() - startTime;
-      
+      this.currentAbortController = null;
+
       if (response.ok) {
         console.log(`[HttpAdapter] Gate triggered successfully in ${duration}ms`);
         return true;
@@ -77,8 +95,14 @@ export class HttpAdapter implements IHttpAdapter {
         console.warn(`[HttpAdapter] Server responded with ${response.status}: ${response.statusText} in ${duration}ms`);
         return false;
       }
-      
     } catch (error) {
+      this.currentAbortController = null;
+
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.log(`[HttpAdapter] HTTP operation was cancelled`);
+        return false;
+      }
+
       const context = NetworkErrorHandler.createContext('http', 'gate trigger', startTime, this.config);
       const networkError = NetworkErrorHandler.categorizeError(error as Error, context);
       NetworkErrorHandler.logError('Gate trigger failed', networkError, context);

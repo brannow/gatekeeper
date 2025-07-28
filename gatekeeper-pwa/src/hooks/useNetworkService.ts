@@ -52,5 +52,8 @@ export function useNetworkService(config: AppConfig | null, delegate: NetworkSer
     }
   }, [networkService, delegate]);
 
-  return networkService;
+  return {
+    networkService,
+    cancelCurrentOperation: () => networkService?.cancelCurrentOperation(),
+  };
 }

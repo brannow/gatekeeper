@@ -130,64 +130,84 @@ export function useStateMachine(config: UseStateMachineConfig = {}): UseStateMac
   }, [clearStateTimeout, log, onTimeout]);
 
   /**
-   * Update state with metadata and timeout management
+   * Perform a state update, including side-effects like logging, timeouts, and callbacks.
+   * This function is stable and can be used in other callbacks.
+   * @private
    */
-  const updateState = useCallback((
+  const _performUpdate = useCallback((
     newState: GateState, 
     action: GateAction,
     context?: NetworkOperationContext
   ) => {
-    const previousState = currentState;
-    const now = Date.now();
-    
-    log(`State transition: ${previousState} → ${newState} (${action})`);
-    
-    // Clear existing timeout
-    clearStateTimeout();
-    
-    // Update state
-    setCurrentState(newState);
-    setStateTimestamp(now);
-    setStateContext(context);
-    stateStartTimeRef.current = now;
-    
-    // Set timeout for transitional states
-    if (isTransitionalState(newState)) {
-      setStateTimeout(newState);
-    }
-    
-    // Notify callback
-    onStateChange?.(previousState, newState, action);
-    
-  }, [currentState, clearStateTimeout, setStateTimeout, log, onStateChange]);
+    setCurrentState(previousState => {
+      // Avoid redundant updates
+      if (previousState === newState) {
+        return previousState;
+      }
+
+      const now = Date.now();
+      log(`State transition: ${previousState} → ${newState} (${action})`);
+      
+      clearStateTimeout();
+      
+      setStateTimestamp(now);
+      setStateContext(context);
+      stateStartTimeRef.current = now;
+      
+      if (isTransitionalState(newState)) {
+        setStateTimeout(newState);
+      }
+      
+      onStateChange?.(previousState, newState, action);
+      
+      return newState;
+    });
+  }, [clearStateTimeout, setStateTimeout, log, onStateChange]);
 
   /**
-   * Attempt state transition with validation
+   * Attempt state transition with validation. This function is stable and safe to use in effects and callbacks.
    */
   const transition = useCallback(async (
     action: GateAction, 
     context?: NetworkOperationContext
   ): Promise<boolean> => {
-    const nextState = getNextState(currentState, action, context);
+    return new Promise<boolean>((resolve) => {
+      setCurrentState(currentState => {
+        const nextState = getNextState(currentState, action, context);
     
-    if (!nextState) {
-      log(`Invalid transition: ${currentState} + ${action}`, context);
-      return false;
-    }
-    
-    if (!isValidTransition(currentState, nextState, action, context)) {
-      log(`Transition validation failed: ${currentState} → ${nextState} (${action})`, context);
-      return false;
-    }
-    
-    // Handle conditional transitions
-    let finalState = nextState;
-    
-    
-    updateState(finalState, action, context);
-    return true;
-    
-  }, [currentState, updateState, log]);
+        if (!nextState) {
+          log(`Invalid transition: ${currentState} + ${action}`, context);
+          resolve(false);
+          return currentState;
+        }
+        
+        if (!isValidTransition(currentState, nextState, action, context)) {
+          log(`Transition validation failed: ${currentState} → ${nextState} (${action})`, context);
+          resolve(false);
+          return currentState;
+        }
+        
+        // The rest of the update logic is now self-contained
+        const now = Date.now();
+        log(`State transition: ${currentState} → ${nextState} (${action})`);
+        
+        clearStateTimeout();
+        
+        setStateTimestamp(now);
+        setStateContext(context);
+        stateStartTimeRef.current = now;
+        
+        if (isTransitionalState(nextState)) {
+          setStateTimeout(nextState);
+        }
+        
+        onStateChange?.(currentState, nextState, action);
+        
+        resolve(true);
+        return nextState;
+      });
+    });
+  }, [clearStateTimeout, log, onStateChange, setStateTimeout]);
 
   // Update the ref whenever the `transition` function changes
   useEffect(() => {
@@ -235,8 +255,8 @@ export function useStateMachine(config: UseStateMachineConfig = {}): UseStateMac
   const reset = useCallback(async (): Promise<void> => {
     log('Resetting state machine to ready');
     clearStateTimeout();
-    updateState('ready', 'retry');
-  }, [clearStateTimeout, updateState, log]);
+    _performUpdate('ready', 'retry');
+  }, [clearStateTimeout, _performUpdate, log]);
 
   /**
    * Trigger gate operation
@@ -271,8 +291,8 @@ export function useStateMachine(config: UseStateMachineConfig = {}): UseStateMac
     context?: NetworkOperationContext
   ) => {
     log(`Force state change to: ${state}`);
-    updateState(state, 'retry', context);
-  }, [updateState, log]);
+    _performUpdate(state, 'retry', context);
+  }, [_performUpdate, log]);
 
   /**
    * Get elapsed time in current state

@@ -22,6 +22,7 @@ export class MqttAdapter implements IMqttAdapter {
   private triggerResolver: ((value: boolean) => void) | null = null;
   private triggerTimeout: number | null = null;
   private isTriggering = false;
+  private currentAbortController: AbortController | null = null;
   
   // Enhanced Phase 3 features for relay state monitoring
   private relayStateCallback?: (state: RelayState) => void;
@@ -92,13 +93,13 @@ export class MqttAdapter implements IMqttAdapter {
   }
 
   /**
-   * Clean up adapter resources
+   * Clean up adapter resources and cancel any ongoing operations
    * Unsubscribes from topics and disconnects from broker
    */
   async cleanup(): Promise<void> {
     console.log('[MqttAdapter] Cleaning up...');
     
-    this.clearTriggerTimeout();
+    this.cancelCurrentOperation();
     
     try {
       // Unsubscribe from status topic
@@ -114,11 +115,32 @@ export class MqttAdapter implements IMqttAdapter {
   }
 
   /**
+   * Cancel any ongoing MQTT operation
+   */
+  cancelCurrentOperation(): void {
+    if (this.currentAbortController) {
+      console.log('[MqttAdapter] Cancelling ongoing MQTT operation');
+      this.currentAbortController.abort('Operation cancelled by adapter cleanup');
+      this.currentAbortController = null;
+    }
+    this.clearTriggerTimeout();
+    
+    // Disconnect from MQTT broker to stop ping messages
+    if (this.service.connected) {
+      console.log('[MqttAdapter] Disconnecting MQTT service to stop ping messages');
+      this.service.disconnect().catch(error => {
+        console.error('[MqttAdapter] Error disconnecting during cancellation:', error);
+      });
+    }
+  }
+
+  /**
    * Trigger the gate using MQTT publish
    * Enhanced with relay state tracking for Phase 3
+   * @param timestamp - Single timestamp for command deduplication
    * @returns Promise<boolean> - true if gate was triggered successfully
    */
-  async triggerGate(): Promise<boolean> {
+  async triggerGate(timestamp: string): Promise<boolean> {
     const startTime = Date.now();
     
     // Prevent multiple simultaneous triggers
@@ -127,8 +149,14 @@ export class MqttAdapter implements IMqttAdapter {
       return false;
     }
     
+    // Cancel any previous operation
+    this.cancelCurrentOperation();
+    
+    // Create new AbortController for this operation
+    this.currentAbortController = new AbortController();
+    
     try {
-      console.log(`[MqttAdapter] Triggering gate via MQTT...`);
+      console.log(`[MqttAdapter] Triggering gate via MQTT with timestamp: ${timestamp}`);
       this.isTriggering = true;
       
       // Ensure we're connected and subscribed (lazy initialization)
@@ -150,10 +178,17 @@ export class MqttAdapter implements IMqttAdapter {
         this.triggerResolver?.(false);
         this.isTriggering = false;
         this.clearTriggerTimeout();
+        
+        // Disconnect from MQTT broker after timeout to stop ping messages
+        if (this.service.connected) {
+          console.log('[MqttAdapter] Disconnecting MQTT service after timeout');
+          this.service.disconnect().catch(error => {
+            console.error('[MqttAdapter] Error disconnecting after timeout:', error);
+          });
+        }
       }, this.timeout);
 
-      // Publish trigger message with current timestamp
-      const timestamp = Date.now().toString();
+      // Publish trigger message with provided timestamp
       const published = await this.service.publish(this.triggerTopic, timestamp);
       
       if (!published) {
@@ -169,6 +204,8 @@ export class MqttAdapter implements IMqttAdapter {
       const success = await this.triggerPromise;
       const duration = Date.now() - startTime;
       
+      this.currentAbortController = null; // Clear on completion
+      
       if (success) {
         console.log(`[MqttAdapter] Gate triggered successfully in ${duration}ms`);
       } else {
@@ -179,6 +216,15 @@ export class MqttAdapter implements IMqttAdapter {
       return success;
       
     } catch (error) {
+      this.currentAbortController = null; // Clear on error
+      
+      // Handle abort specifically
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.log(`[MqttAdapter] MQTT operation was cancelled`);
+        this.clearTriggerTimeout();
+        return false;
+      }
+      
       const context = NetworkErrorHandler.createContext('mqtt', 'gate trigger', startTime, this.config);
       const networkError = NetworkErrorHandler.categorizeError(error as Error, context);
       NetworkErrorHandler.logError('Gate trigger failed', networkError, context);
@@ -317,6 +363,14 @@ export class MqttAdapter implements IMqttAdapter {
           // Gate operation completed successfully
           this.triggerResolver?.(true);
           this.clearTriggerTimeout();
+          
+          // Disconnect from MQTT broker after successful trigger to stop ping messages
+          if (this.service.connected) {
+            console.log('[MqttAdapter] Disconnecting MQTT service after successful trigger');
+            this.service.disconnect().catch(error => {
+              console.error('[MqttAdapter] Error disconnecting after success:', error);
+            });
+          }
           break;
           
         default:

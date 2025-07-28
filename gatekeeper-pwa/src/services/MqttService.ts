@@ -14,10 +14,7 @@ export class MqttService {
   private isConnected = false;
   private isConnecting = false;
   private subscriptions = new Map<string, (payload: string) => void>();
-  private reconnectAttempts = 0;
-  private readonly maxReconnectAttempts = 3;
   private reconnectTimer: number | null = null;
-  private pingTimer: number | null = null;
   private connectPromise: Promise<boolean> | null = null;
   private connectResolver: ((value: boolean) => void) | null = null;
 
@@ -61,8 +58,6 @@ export class MqttService {
       
       if (connected) {
         this.isConnected = true;
-        this.reconnectAttempts = 0;
-        this.startPingTimer();
         console.log(`[MqttService] Connected successfully`);
       }
 
@@ -301,9 +296,6 @@ export class MqttService {
         case 11: // UNSUBACK
           console.log('[MqttService] Unsubscription acknowledged');
           break;
-        case 13: // PINGRESP
-          console.log('[MqttService] Ping response received');
-          break;
         case 14: // DISCONNECT
           console.log('[MqttService] DISCONNECT received from broker');
           this.handleDisconnect(buffer);
@@ -395,20 +387,6 @@ export class MqttService {
   private handleDisconnection(): void {
     this.isConnected = false;
     this.clearTimers();
-
-    if (this.reconnectAttempts < this.maxReconnectAttempts) {
-      const delay = Math.pow(2, this.reconnectAttempts) * 1000; // Exponential backoff
-      console.log(`[MqttService] Attempting reconnect in ${delay}ms (attempt ${this.reconnectAttempts + 1}/${this.maxReconnectAttempts})`);
-      
-      this.reconnectTimer = setTimeout(() => {
-        this.reconnectAttempts++;
-        this.connect().catch(error => {
-          console.error('[MqttService] Reconnection failed:', error);
-        });
-      }, delay);
-    } else {
-      console.error('[MqttService] Max reconnection attempts reached');
-    }
   }
 
   /**
@@ -625,36 +603,12 @@ export class MqttService {
   }
 
   /**
-   * Create MQTT PINGREQ packet
-   */
-  private createPingPacket(): Uint8Array {
-    return new Uint8Array([0xC0, 0x00]); // PINGREQ packet
-  }
-
-  /**
-   * Start ping timer for keep-alive
-   */
-  private startPingTimer(): void {
-    this.pingTimer = setInterval(() => {
-      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-        const pingPacket = this.createPingPacket();
-        this.ws.send(pingPacket);
-      }
-    }, 30000); // Ping every 30 seconds
-  }
-
-  /**
    * Clear all timers
    */
   private clearTimers(): void {
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
-    }
-    
-    if (this.pingTimer) {
-      clearInterval(this.pingTimer);
-      this.pingTimer = null;
     }
   }
 

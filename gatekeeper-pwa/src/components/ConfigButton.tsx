@@ -4,7 +4,6 @@ import type { AppConfig } from '../types';
 
 interface ConfigButtonProps {
   onClick: () => void;
-  onInstallPrompt?: () => void;
   className?: string;
 }
 
@@ -17,8 +16,6 @@ interface ConfigurationIssues {
 
 interface PWAIndicatorData {
   isOffline: boolean;
-  isInstallable: boolean;
-  isInstalled: boolean;
   hasQueuedItems: boolean;
   isStandalone: boolean;
 }
@@ -40,15 +37,12 @@ interface PWAIndicatorData {
  *   - Service worker coordination
  *   - Background sync indicators
  */
-const ConfigButton: React.FC<ConfigButtonProps> = ({ onClick, onInstallPrompt, className = '' }) => {
+const ConfigButton: React.FC<ConfigButtonProps> = ({ onClick, className = '' }) => {
   const { 
     config, 
     error, 
     offlineStatus, 
-    installStatus, 
     queueSize, 
-    canInstall,
-    showInstallPrompt,
     processOfflineQueue 
   } = useConfig();
 
@@ -92,12 +86,10 @@ const ConfigButton: React.FC<ConfigButtonProps> = ({ onClick, onInstallPrompt, c
 
   // Show PWA badge when significant PWA events occur
   useEffect(() => {
-    const shouldShowBadge = canInstall || 
-                           (queueSize > 0 && offlineStatus === 'offline') ||
-                           (installStatus === 'installable' && !isStandalone);
+    const shouldShowBadge = (queueSize > 0 && offlineStatus === 'offline');
     
     setShowPWABadge(shouldShowBadge);
-  }, [canInstall, queueSize, offlineStatus, installStatus, isStandalone]);
+  }, [queueSize, offlineStatus]);
 
   // Analyze configuration for issues that need user attention
   const analyzeConfigurationIssues = useCallback((config: AppConfig, error: string | null): ConfigurationIssues => {
@@ -127,12 +119,10 @@ const ConfigButton: React.FC<ConfigButtonProps> = ({ onClick, onInstallPrompt, c
   const getPWAIndicatorData = useCallback((): PWAIndicatorData => {
     return {
       isOffline: offlineStatus === 'offline',
-      isInstallable: installStatus === 'installable' && canInstall,
-      isInstalled: installStatus === 'installed' || isStandalone,
       hasQueuedItems: queueSize > 0,
       isStandalone
     };
-  }, [offlineStatus, installStatus, canInstall, queueSize, isStandalone]);
+  }, [offlineStatus, queueSize, isStandalone]);
 
   const pwaData = getPWAIndicatorData();
 
@@ -153,29 +143,9 @@ const ConfigButton: React.FC<ConfigButtonProps> = ({ onClick, onInstallPrompt, c
       return;
     }
 
-    // Handle installation prompt
-    if (pwaData.isInstallable && !isStandalone) {
-      event.preventDefault();
-      
-      // Use provided install prompt callback if available, otherwise use built-in
-      if (onInstallPrompt) {
-        onInstallPrompt();
-      } else {
-        try {
-          const installed = await showInstallPrompt();
-          if (installed) {
-            console.log('[ConfigButton] PWA installation completed');
-          }
-        } catch (error) {
-          console.error('[ConfigButton] PWA installation failed:', error);
-        }
-      }
-      return;
-    }
-
     // Default action - open configuration
     onClick();
-  }, [pwaData, offlineStatus, isProcessingQueue, processOfflineQueue, showInstallPrompt, isStandalone, onInstallPrompt, onClick]);
+  }, [pwaData, offlineStatus, isProcessingQueue, processOfflineQueue, onClick]);
 
   // Generate appropriate aria-label based on configuration and PWA status
   const getAriaLabel = useCallback(() => {
@@ -187,9 +157,6 @@ const ConfigButton: React.FC<ConfigButtonProps> = ({ onClick, onInstallPrompt, c
       return `Process ${queueSize} queued gate trigger${queueSize !== 1 ? 's' : ''} - ${shortcut}`;
     }
     
-    if (pwaData.isInstallable && !isStandalone) {
-      return `Install Gatekeeper as PWA - ${shortcut}`;
-    }
     
     if (!issues.hasIssues) {
       return `${baseLabel} - ${shortcut}`;
@@ -202,7 +169,7 @@ const ConfigButton: React.FC<ConfigButtonProps> = ({ onClick, onInstallPrompt, c
     
     const issueDescription = issueTypes.join(', ');
     return `${baseLabel} (Issues detected: ${issueDescription}) - ${shortcut}`;
-  }, [issues, pwaData, offlineStatus, queueSize, isStandalone]);
+  }, [issues, pwaData, offlineStatus, queueSize]);
 
   // Generate appropriate tooltip based on configuration and PWA status
   const getTooltip = useCallback(() => {
@@ -217,9 +184,6 @@ const ConfigButton: React.FC<ConfigButtonProps> = ({ onClick, onInstallPrompt, c
       return `Process ${queueSize} queued operation${queueSize !== 1 ? 's' : ''} from offline mode`;
     }
     
-    if (pwaData.isInstallable && !isStandalone) {
-      return 'Install Gatekeeper as PWA for better offline experience';
-    }
     
     if (pwaData.isOffline) {
       return `${baseTitle} (Operating in offline mode)`;
@@ -251,21 +215,18 @@ const ConfigButton: React.FC<ConfigButtonProps> = ({ onClick, onInstallPrompt, c
     if (issues.hasIssues) classes.push('has-issues');
     if (pwaData.isOffline) classes.push('offline-mode');
     if (pwaData.hasQueuedItems) classes.push('has-queue');
-    if (pwaData.isInstallable && !isStandalone) classes.push('installable');
     if (isStandalone) classes.push('standalone-mode');
     if (isProcessingQueue) classes.push('processing');
     
     return classes.join(' ');
-  }, [className, issues.hasIssues, pwaData, isStandalone, isProcessingQueue]);
+  }, [className, issues.hasIssues, pwaData, isProcessingQueue]);
 
-  // Get primary icon based on current state
-  const getPrimaryIcon = useCallback(() => {
-    if (isProcessingQueue) return '⏳';
-    if (pwaData.hasQueuedItems && offlineStatus === 'online') return '📤';
-    if (pwaData.isInstallable && !isStandalone) return '📲';
-    if (issues.hasIssues) return '⚠️';
-    return '⚙️';
-  }, [isProcessingQueue, pwaData, offlineStatus, isStandalone, issues.hasIssues]);
+  // Get button text based on current state
+  const getButtonText = useCallback(() => {
+    if (isProcessingQueue) return 'Processing...';
+    if (pwaData.hasQueuedItems && offlineStatus === 'online') return 'Sync';
+    return 'Config';
+  }, [isProcessingQueue, pwaData, offlineStatus]);
 
   return (
     <button 
@@ -276,10 +237,7 @@ const ConfigButton: React.FC<ConfigButtonProps> = ({ onClick, onInstallPrompt, c
       type="button"
       disabled={isProcessingQueue}
     >
-      {/* Primary icon */}
-      <span className="config-icon-primary">
-        {getPrimaryIcon()}
-      </span>
+      {getButtonText()}
       
       {/* PWA status badge */}
       {showPWABadge && (
@@ -299,7 +257,6 @@ const ConfigButton: React.FC<ConfigButtonProps> = ({ onClick, onInstallPrompt, c
         {issues.hasIssues && ' - Issues detected'}
         {pwaData.isOffline && ' - Offline mode'}
         {pwaData.hasQueuedItems && ` - ${queueSize} queued operations`}
-        {pwaData.isInstallable && !isStandalone && ' - PWA installable'}
       </span>
     </button>
   );

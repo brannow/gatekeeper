@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import TriggerButton from './components/TriggerButton';
 import ConfigButton from './components/ConfigButton';
+import InstallButton from './components/InstallButton';
 import ConfigModal from './components/ConfigModal';
 import InstallPrompt from './components/InstallPrompt';
 import { useTheme } from './hooks/useTheme';
@@ -76,10 +77,9 @@ function App() {
     >
       <div className="main-content">
         <TriggerButton />
+        <ConfigButton onClick={openModal} />
+        <InstallButton onInstallPrompt={openInstallPrompt} />
       </div>
-      
-      {/* Floating Configuration Button - Outside main-content to avoid flex interference */}
-      <ConfigButton onClick={openModal} onInstallPrompt={openInstallPrompt} />
       
       {/* Theme error display */}
       {themeError && (

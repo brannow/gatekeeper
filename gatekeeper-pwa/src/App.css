@@ -365,68 +365,148 @@ body {
   animation: fade-warning 3s ease-in-out infinite;
 }
 
-/* Floating Configuration Button Design */
-.config-button {
-  position: fixed;
-  top: calc(20px + env(safe-area-inset-top));
-  right: calc(20px + env(safe-area-inset-right));
-  
-  /* Appearance */
-  width: 56px;
-  height: 56px;
+/* Configuration Button Design */
+button.config-button {
+  /* Appearance - Force rectangular styling */
+  padding: 8px 16px !important;
   min-width: 44px; /* Ensure minimum touch target */
   min-height: 44px;
-  border-radius: 50%;
-  border: none;
+  width: auto !important;
+  height: auto !important;
+  border-radius: 4px !important;
+  border: 1px solid var(--border-light);
+  aspect-ratio: unset !important;
+  
+  /* Remove iOS button styling */
+  -webkit-appearance: none;
+  appearance: none;
   
   /* Color scheme matching app theme */
-  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-hover));
-  color: var(--text-white);
-  box-shadow: 0 4px 20px var(--shadow-light);
+  background: var(--bg-button);
+  color: var(--text-primary);
+  box-shadow: 0 2px 4px var(--shadow-light);
   
   /* Typography */
-  font-size: 24px;
-  line-height: 1;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.2;
+  text-align: center;
   
   /* Interaction */
   cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  z-index: 100;
+  transition: all 0.2s ease;
   
   /* Accessibility */
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 4px;
   
-  /* Remove text content spacing */
-  padding: 0;
-  margin: 0;
+  /* Professional button styling - center properly */
+  margin: 20px auto 8px auto;
+  position: relative;
+  left: 0; /* Reset any inherited left positioning */
+}
+
+/* Install Button Design */
+.install-button {
+  /* Appearance - Similar to config button but distinct */
+  padding: 10px 18px !important;
+  min-width: 44px;
+  min-height: 44px;
+  width: auto !important;
+  height: auto !important;
+  border-radius: 6px !important;
+  border: 2px solid var(--color-secondary);
+  aspect-ratio: unset !important;
+  
+  /* Remove iOS button styling */
+  -webkit-appearance: none;
+  appearance: none;
+  
+  /* Color scheme - Secondary color for install */
+  background: var(--color-secondary);
+  color: var(--text-white);
+  box-shadow: 0 3px 6px var(--shadow-medium);
+  
+  /* Typography */
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-align: center;
+  
+  /* Interaction */
+  cursor: pointer;
+  transition: all 0.3s ease;
+  
+  /* Accessibility */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  
+  /* Positioning */
+  margin: 8px 0 0 0;
+  position: relative;
+}
+
+.install-button:hover {
+  background: var(--color-secondary-hover);
+  border-color: var(--color-secondary-hover);
+  box-shadow: 0 4px 12px var(--shadow-strong);
+  transform: translateY(-1px);
+}
+
+.install-button:active {
+  background: var(--color-secondary-light);
+  transform: translateY(0);
+  box-shadow: 0 2px 4px var(--shadow-light);
+}
+
+.install-button:focus {
+  outline: none;
+  box-shadow: 0 3px 6px var(--shadow-medium), 0 0 0 3px rgba(33, 150, 243, 0.3);
+}
+
+.install-button-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.install-button-text {
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .config-button:hover {
-  background: linear-gradient(135deg, var(--color-primary-hover), var(--color-primary-light));
-  transform: translateY(-2px) scale(1.05);
-  box-shadow: 0 6px 25px var(--shadow-medium);
+  background: var(--color-primary);
+  color: var(--text-white);
+  border-color: var(--color-primary);
+  box-shadow: 0 4px 8px var(--shadow-medium);
 }
 
 .config-button:active {
-  transform: translateY(-1px) scale(1.02);
-  transition: all 0.1s cubic-bezier(0.4, 0, 0.2, 1);
+  background: var(--color-primary-dark);
+  transform: translateY(1px);
+  box-shadow: 0 1px 2px var(--shadow-light);
 }
 
 .config-button:focus {
   outline: none;
-  box-shadow: 0 4px 20px var(--shadow-medium), 0 0 0 3px var(--shadow-light);
+  box-shadow: 0 2px 4px var(--shadow-light), 0 0 0 2px var(--color-primary);
 }
 
 /* Status-aware config button styling */
 .config-button.has-issues {
-  background: linear-gradient(135deg, var(--color-warning), var(--color-warning-hover));
+  background: var(--color-warning);
+  color: var(--text-white);
+  border-color: var(--color-warning);
   animation: pulse-config-warning 2s ease-in-out infinite;
 }
 
 .config-button.has-issues:hover {
-  background: linear-gradient(135deg, var(--color-warning-hover), var(--color-warning-light));
+  background: var(--color-warning-hover);
+  border-color: var(--color-warning-hover);
 }
 
 @keyframes pulse-config-warning {
@@ -448,7 +528,6 @@ body {
   .config-button {
     /* Enhanced visibility in standalone mode */
     box-shadow: 0 6px 30px rgba(76, 175, 80, 0.4);
-    z-index: 1000;
   }
   
   .config-button.standalone-mode {
@@ -457,14 +536,6 @@ body {
   }
 }
 
-/* iOS Safari specific optimizations */
-@supports (-webkit-touch-callout: none) {
-  .config-button {
-    /* Additional iOS edge gesture margin (included in positioning calc) */
-    margin-right: 4px;
-    margin-top: 4px;
-  }
-}
 
 /* Offline mode styling */
 .config-button.offline-mode {
@@ -798,6 +869,17 @@ body {
     -webkit-backdrop-filter: blur(4px);
     backdrop-filter: blur(4px);
   }
+  
+  /* Force config button styling on iOS */
+  .config-button {
+    border-radius: 4px !important;
+    width: auto !important;
+    height: auto !important;
+    padding: 8px 16px !important;
+    aspect-ratio: unset !important;
+    -webkit-appearance: none !important;
+    appearance: none !important;
+  }
 }
 
 
@@ -941,179 +1023,6 @@ body {
   }
 }
 
-/* State Display and Progress Indicators */
-.state-display {
-  margin-top: 16px;
-  padding: 16px;
-  background: var(--bg-secondary);
-  border-radius: 12px;
-  color: var(--text-secondary);
-  font-size: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  box-shadow: 0 2px 8px var(--shadow-light);
-}
-
-.state-info {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.state-title {
-  font-weight: 600;
-  color: var(--text-primary);
-  font-size: 16px;
-}
-
-.state-elapsed {
-  font-size: 12px;
-  color: var(--text-tertiary);
-  font-family: monospace;
-}
-
-.progress-container {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.progress-bar {
-  flex: 1;
-  height: 4px;
-  background: var(--border-primary);
-  border-radius: 2px;
-  overflow: hidden;
-}
-
-.progress-fill {
-  height: 100%;
-  background: var(--color-primary);
-  transition: width 0.3s ease;
-}
-
-.progress-fill.indeterminate {
-  width: 30%;
-  animation: progress-slide 2s ease-in-out infinite;
-}
-
-@keyframes progress-slide {
-  0% { transform: translateX(-100%); }
-  50% { transform: translateX(0%); }
-  100% { transform: translateX(300%); }
-}
-
-.spinner {
-  width: 20px;
-  height: 20px;
-  border: 2px solid var(--border-primary);
-  border-top: 2px solid var(--color-primary);
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-.retry-button {
-  padding: 8px 16px;
-  background: var(--color-warning);
-  color: var(--text-white);
-  border: none;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.retry-button:hover {
-  background: var(--color-warning-hover);
-  transform: translateY(-1px);
-}
-
-.retry-button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-  transform: none;
-}
-
-.config-display {
-  margin-top: 0;
-  padding: 12px;
-  background: transparent;
-  border-radius: 0;
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-family: monospace;
-}
-
-/* Network Status Display */
-.network-status {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.network-method {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.method-label {
-  font-weight: 600;
-  color: var(--text-secondary);
-  min-width: 45px;
-}
-
-.status-indicator {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11px;
-}
-
-.status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--color-gray); /* unknown */
-  transition: background-color 0.3s ease;
-}
-
-
-.active-method {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 4px;
-  padding-top: 8px;
-  border-top: 1px solid var(--border-primary);
-}
-
-.active-label {
-  font-weight: 600;
-  color: var(--color-primary);
-  font-size: 11px;
-}
-
-.active-indicator {
-  background: var(--color-primary);
-  color: var(--text-white);
-  padding: 2px 8px;
-  border-radius: 12px;
-  font-size: 10px;
-  font-weight: 600;
-}
-
-.adapter-count {
-  margin-top: 4px;
-  color: var(--text-tertiary);
-  font-size: 10px;
-}
 
 .error-message {
   display: block;
@@ -1793,19 +1702,6 @@ body {
   min-width: 60px;
 }
 
-.status-indicator.online {
-  color: var(--color-success);
-}
-
-.status-indicator.offline {
-  color: var(--color-warning);
-  animation: pulse-warning 2s ease-in-out infinite;
-}
-
-.status-indicator.checking {
-  color: var(--color-secondary);
-  animation: pulse-blue 1.5s ease-in-out infinite;
-}
 
 .queue-indicator {
   color: var(--color-warning);

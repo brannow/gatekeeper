@@ -10,8 +10,8 @@
  * - Cache management and cleanup
  */
 
-const CACHE_NAME = 'gatekeeper-v1.0.0';
-const STATIC_CACHE_NAME = 'gatekeeper-static-v1.0.0';
+const CACHE_NAME = 'gatekeeper-v1.0.2';
+const STATIC_CACHE_NAME = 'gatekeeper-static-v1.0.2';
 const OFFLINE_QUEUE_NAME = 'gatekeeper-offline-queue';
 
 // Assets to cache on install

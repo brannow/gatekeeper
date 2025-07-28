@@ -32,21 +32,41 @@ export class MqttAdapter implements IMqttAdapter {
 
   /**
    * Initialize the MQTT adapter
-   * Sets up connection and subscribes to status topic
+   * Only validates configuration - connection happens on-demand
    */
   async initialize(): Promise<void> {
     console.log(`[MqttAdapter] Initializing MQTT adapter for ${this.config.host}:${this.config.port}`);
     
-    const startTime = Date.now();
-    
     try {
       // Validate configuration using centralized validation
       validationService.validateMQTTConfigStrict(this.config);
-      
+      console.log('[MqttAdapter] Initialized successfully - connection will be established on-demand');
+    } catch (error) {
+      const context = NetworkErrorHandler.createContext('mqtt', 'initialization', Date.now(), this.config);
+      const networkError = NetworkErrorHandler.categorizeError(error as Error, context);
+      NetworkErrorHandler.logError('Initialization failed', networkError, context);
+      throw error;
+    }
+  }
+
+  /**
+   * Ensure MQTT connection and subscription (lazy initialization)
+   * @returns Promise<boolean> - true if connected and subscribed
+   */
+  private async ensureConnected(): Promise<boolean> {
+    if (this.service.connected) {
+      return true;
+    }
+
+    console.log('[MqttAdapter] Establishing connection on-demand...');
+    const startTime = Date.now();
+    
+    try {
       // Connect to MQTT broker
       const connected = await this.service.connect();
       if (!connected) {
-        throw new Error('Failed to connect to MQTT broker');
+        console.error('[MqttAdapter] Failed to connect to MQTT broker');
+        return false;
       }
 
       // Subscribe to status topic for relay state feedback
@@ -55,15 +75,18 @@ export class MqttAdapter implements IMqttAdapter {
       });
 
       if (!subscribed) {
-        throw new Error('Failed to subscribe to status topic');
+        console.error('[MqttAdapter] Failed to subscribe to status topic');
+        return false;
       }
 
-      console.log(`[MqttAdapter] Initialized successfully, subscribed to ${this.statusTopic}`);
+      const duration = Date.now() - startTime;
+      console.log(`[MqttAdapter] Connected and subscribed to ${this.statusTopic} in ${duration}ms`);
+      return true;
     } catch (error) {
-      const context = NetworkErrorHandler.createContext('mqtt', 'initialization', startTime, this.config);
+      const context = NetworkErrorHandler.createContext('mqtt', 'connection', startTime, this.config);
       const networkError = NetworkErrorHandler.categorizeError(error as Error, context);
-      NetworkErrorHandler.logError('Initialization failed', networkError, context);
-      throw error;
+      NetworkErrorHandler.logError('Connection failed', networkError, context);
+      return false;
     }
   }
 
@@ -100,9 +123,11 @@ export class MqttAdapter implements IMqttAdapter {
     try {
       console.log(`[MqttAdapter] Triggering gate via MQTT...`);
       
-      // Ensure we're connected and subscribed
-      if (!this.service.connected) {
-        await this.initialize();
+      // Ensure we're connected and subscribed (lazy initialization)
+      const connected = await this.ensureConnected();
+      if (!connected) {
+        console.error('[MqttAdapter] Failed to establish MQTT connection');
+        return false;
       }
 
       // Create promise for trigger completion
@@ -162,7 +187,8 @@ export class MqttAdapter implements IMqttAdapter {
     try {
       console.log(`[MqttAdapter] Testing connection to ${this.config.host}:${this.config.port}`);
       
-      const connected = await this.service.testConnection();
+      // Use lazy connection for testing
+      const connected = await this.ensureConnected();
       const duration = Date.now() - startTime;
       
       console.log(

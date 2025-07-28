@@ -25,7 +25,7 @@ export function useNetworkService(config: AppConfig | null, delegate: NetworkSer
         await service.addAdapter(mqttAdapter);
       }
 
-      await service.initialize();
+      // Adapters are already initialized when added - no need for redundant initialize()
       setNetworkService(service);
     };
 

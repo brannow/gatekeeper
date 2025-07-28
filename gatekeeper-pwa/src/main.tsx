@@ -2,6 +2,10 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App.tsx'
 import { registerSW } from 'virtual:pwa-register'
+import LoggingService from './services/LoggingService'
+
+// Initialize enhanced logging system
+new LoggingService();
 
 /**
  * Initialize PWA features with Vite PWA plugin

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createNetworkService, NetworkService } from '../services/NetworkService';
 import { createHttpAdapter } from '../adapters/HttpAdapter';
 import { createMqttAdapter } from '../adapters/MqttAdapter';
@@ -7,12 +7,20 @@ import { NetworkServiceDelegate } from '../types/network';
 
 export function useNetworkService(config: AppConfig | null, delegate: NetworkServiceDelegate) {
   const [networkService, setNetworkService] = useState<NetworkService | null>(null);
+  const delegateRef = useRef<NetworkServiceDelegate>(delegate);
+  
+  // Keep delegate ref updated without triggering effect
+  delegateRef.current = delegate;
 
   useEffect(() => {
-    if (!config) return;
+    if (!config) {
+      setNetworkService(null);
+      return;
+    }
 
     const service = createNetworkService();
-    service.delegate = delegate;
+    // Use ref to avoid dependency on delegate
+    service.delegate = delegateRef.current;
 
     const initialize = async () => {
       if (config.esp32.host && config.esp32.port) {
@@ -32,9 +40,17 @@ export function useNetworkService(config: AppConfig | null, delegate: NetworkSer
     initialize();
 
     return () => {
+      setNetworkService(null);
       service.cleanup();
     };
-  }, [config, delegate]);
+  }, [config]); // Only depend on config, not delegate
+
+  // Update delegate when service exists
+  useEffect(() => {
+    if (networkService) {
+      networkService.delegate = delegate;
+    }
+  }, [networkService, delegate]);
 
   return networkService;
 }

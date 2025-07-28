@@ -412,6 +412,22 @@ export class MqttService {
   }
 
   /**
+   * Encode variable length integer according to MQTT specification
+   */
+  private encodeVariableLength(value: number): Uint8Array {
+    const bytes: number[] = [];
+    do {
+      let encodedByte = value % 128;
+      value = Math.floor(value / 128);
+      if (value > 0) {
+        encodedByte = encodedByte | 128;
+      }
+      bytes.push(encodedByte);
+    } while (value > 0);
+    return new Uint8Array(bytes);
+  }
+
+  /**
    * Create MQTT CONNECT packet
    */
   private createConnectPacket(): Uint8Array {
@@ -434,13 +450,15 @@ export class MqttService {
                          (hasPassword ? 2 + passwordBytes.length : 0);
     
     const totalLength = variableHeaderLength + payloadLength;
-    const packet = new Uint8Array(2 + totalLength);
+    const remainingLengthBytes = this.encodeVariableLength(totalLength);
+    const packet = new Uint8Array(1 + remainingLengthBytes.length + totalLength);
     
     let offset = 0;
     
     // Fixed header
     packet[offset++] = 0x10; // CONNECT packet type
-    packet[offset++] = totalLength;
+    packet.set(remainingLengthBytes, offset);
+    offset += remainingLengthBytes.length;
     
     // Variable header
     packet[offset++] = 0x00; // Protocol name length MSB
@@ -483,27 +501,36 @@ export class MqttService {
   }
 
   /**
-   * Create MQTT PUBLISH packet
+   * Create MQTT PUBLISH packet (MQTT 5.0)
    */
   private createPublishPacket(topic: string, payload: string): Uint8Array {
     const topicBytes = new TextEncoder().encode(topic);
     const payloadBytes = new TextEncoder().encode(payload);
     
-    const variableHeaderLength = 2 + topicBytes.length;
+    // MQTT 5.0 requires properties field
+    const propertiesLength = 1; // Empty properties = 1 byte (length = 0)
+    const variableHeaderLength = 2 + topicBytes.length + propertiesLength;
     const totalLength = variableHeaderLength + payloadBytes.length;
-    const packet = new Uint8Array(2 + totalLength);
+    
+    // Use variable length encoding for remaining length
+    const remainingLengthBytes = this.encodeVariableLength(totalLength);
+    const packet = new Uint8Array(1 + remainingLengthBytes.length + totalLength);
     
     let offset = 0;
     
     // Fixed header
     packet[offset++] = 0x30; // PUBLISH packet type, QoS 0
-    packet[offset++] = totalLength;
+    packet.set(remainingLengthBytes, offset);
+    offset += remainingLengthBytes.length;
     
     // Variable header - Topic
     packet[offset++] = (topicBytes.length >> 8) & 0xFF;
     packet[offset++] = topicBytes.length & 0xFF;
     packet.set(topicBytes, offset);
     offset += topicBytes.length;
+    
+    // MQTT 5.0 Properties (empty)
+    packet[offset++] = 0x00; // Properties length = 0
     
     // Payload
     packet.set(payloadBytes, offset);
@@ -523,13 +550,15 @@ export class MqttService {
     const variableHeaderLength = 2 + propertiesLength; // Packet identifier + properties
     const payloadLength = 2 + topicBytes.length + 1; // Topic + QoS
     const totalLength = variableHeaderLength + payloadLength;
-    const packet = new Uint8Array(2 + totalLength);
+    const remainingLengthBytes = this.encodeVariableLength(totalLength);
+    const packet = new Uint8Array(1 + remainingLengthBytes.length + totalLength);
     
     let offset = 0;
     
     // Fixed header
     packet[offset++] = 0x82; // SUBSCRIBE packet type
-    packet[offset++] = totalLength;
+    packet.set(remainingLengthBytes, offset);
+    offset += remainingLengthBytes.length;
     
     // Variable header - Packet identifier
     packet[offset++] = (packetId >> 8) & 0xFF;
@@ -551,26 +580,33 @@ export class MqttService {
   }
 
   /**
-   * Create MQTT UNSUBSCRIBE packet
+   * Create MQTT UNSUBSCRIBE packet (MQTT 5.0)
    */
   private createUnsubscribePacket(topic: string): Uint8Array {
     const topicBytes = new TextEncoder().encode(topic);
     const packetId = Math.floor(Math.random() * 65535) + 1;
     
-    const variableHeaderLength = 2; // Packet identifier
+    // MQTT 5.0 requires properties field
+    const propertiesLength = 1; // Empty properties = 1 byte (length = 0)
+    const variableHeaderLength = 2 + propertiesLength; // Packet identifier + properties
     const payloadLength = 2 + topicBytes.length;
     const totalLength = variableHeaderLength + payloadLength;
-    const packet = new Uint8Array(2 + totalLength);
+    const remainingLengthBytes = this.encodeVariableLength(totalLength);
+    const packet = new Uint8Array(1 + remainingLengthBytes.length + totalLength);
     
     let offset = 0;
     
     // Fixed header
     packet[offset++] = 0xA2; // UNSUBSCRIBE packet type
-    packet[offset++] = totalLength;
+    packet.set(remainingLengthBytes, offset);
+    offset += remainingLengthBytes.length;
     
     // Variable header - Packet identifier
     packet[offset++] = (packetId >> 8) & 0xFF;
     packet[offset++] = packetId & 0xFF;
+    
+    // MQTT 5.0 Properties (empty)
+    packet[offset++] = 0x00; // Properties length = 0
     
     // Payload - Topic filter
     packet[offset++] = (topicBytes.length >> 8) & 0xFF;
@@ -581,10 +617,11 @@ export class MqttService {
   }
 
   /**
-   * Create MQTT DISCONNECT packet
+   * Create MQTT DISCONNECT packet (MQTT 5.0)
    */
   private createDisconnectPacket(): Uint8Array {
-    return new Uint8Array([0xE0, 0x00]); // DISCONNECT packet
+    // MQTT 5.0 DISCONNECT with reason code 0 (Normal disconnection) and empty properties
+    return new Uint8Array([0xE0, 0x02, 0x00, 0x00]); // DISCONNECT packet + reason code + properties length
   }
 
   /**

@@ -21,6 +21,7 @@ export class MqttAdapter implements IMqttAdapter {
   private triggerPromise: Promise<boolean> | null = null;
   private triggerResolver: ((value: boolean) => void) | null = null;
   private triggerTimeout: number | null = null;
+  private isTriggering = false;
   
   // Enhanced Phase 3 features for relay state monitoring
   private relayStateCallback?: (state: RelayState) => void;
@@ -120,13 +121,21 @@ export class MqttAdapter implements IMqttAdapter {
   async triggerGate(): Promise<boolean> {
     const startTime = Date.now();
     
+    // Prevent multiple simultaneous triggers
+    if (this.isTriggering) {
+      console.warn('[MqttAdapter] Gate trigger already in progress, ignoring duplicate request');
+      return false;
+    }
+    
     try {
       console.log(`[MqttAdapter] Triggering gate via MQTT...`);
+      this.isTriggering = true;
       
       // Ensure we're connected and subscribed (lazy initialization)
       const connected = await this.ensureConnected();
       if (!connected) {
         console.error('[MqttAdapter] Failed to establish MQTT connection');
+        this.isTriggering = false;
         return false;
       }
 
@@ -139,6 +148,7 @@ export class MqttAdapter implements IMqttAdapter {
       this.triggerTimeout = setTimeout(() => {
         console.warn('[MqttAdapter] Trigger operation timed out');
         this.triggerResolver?.(false);
+        this.isTriggering = false;
         this.clearTriggerTimeout();
       }, this.timeout);
 
@@ -149,6 +159,7 @@ export class MqttAdapter implements IMqttAdapter {
       if (!published) {
         this.clearTriggerTimeout();
         this.triggerResolver?.(false);
+        this.isTriggering = false;
         return false;
       }
 
@@ -164,6 +175,7 @@ export class MqttAdapter implements IMqttAdapter {
         console.warn(`[MqttAdapter] Gate trigger failed after ${duration}ms`);
       }
       
+      this.isTriggering = false;
       return success;
       
     } catch (error) {
@@ -173,6 +185,7 @@ export class MqttAdapter implements IMqttAdapter {
       
       this.clearTriggerTimeout();
       this.triggerResolver?.(false);
+      this.isTriggering = false;
       return false;
     }
   }
@@ -338,6 +351,7 @@ export class MqttAdapter implements IMqttAdapter {
     
     this.triggerPromise = null;
     this.triggerResolver = null;
+    this.isTriggering = false;
   }
 
 }

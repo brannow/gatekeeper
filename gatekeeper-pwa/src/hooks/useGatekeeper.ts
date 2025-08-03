@@ -97,7 +97,7 @@ export function useGatekeeper() {
   useEffect(() => {
     if (stateMachine.currentState === 'triggering' && !triggerInProgress.current) {
       triggerInProgress.current = true;
-      const timestamp = Date.now().toString();
+      const timestamp = Math.floor(Date.now() / 1000).toString();
       console.log(`[useGatekeeper] Generated timestamp for gate trigger: ${timestamp}`);
       void performGateTrigger(timestamp);
     }

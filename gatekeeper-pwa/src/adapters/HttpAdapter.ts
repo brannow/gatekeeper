@@ -99,9 +99,9 @@ export class HttpAdapter implements IHttpAdapter {
         method: 'POST',
         headers: {
           ...HTTP_REQUEST.HEADERS,
-          'Content-Type': 'application/json'
+          'Content-Type': 'text/plain'
         },
-        body: JSON.stringify({ timestamp }),
+        body: timestamp,
         signal: this.currentAbortController.signal
       });
 
@@ -149,11 +149,11 @@ export class HttpAdapter implements IHttpAdapter {
       validationService.validateESP32ConfigStrict(this.config);
       
       // Use HEAD request as web-compatible ping alternative
-      const url = this.buildUrl('/');
+      const url = this.buildUrl('/trigger');
       console.log(`[HttpAdapter] Testing connection (HEAD): ${url}`);
       
       const response = await fetch(url, {
-        method: 'HEAD',
+        method: 'OPTIONS',
         headers: { 'Accept': '*/*' },
         signal: AbortSignal.timeout(this.timeout),
         mode: 'cors', // Handle CORS for local network requests

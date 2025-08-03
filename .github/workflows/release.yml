@@ -1,0 +1,102 @@
+name: Build and Release PWA
+
+on:
+  push:
+    tags:
+      - 'v*'  # Triggers on version tags like v1.0.0
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: gatekeeper-pwa/package-lock.json
+          
+      - name: Install dependencies
+        working-directory: gatekeeper-pwa
+        run: npm ci
+        
+      - name: Type check
+        working-directory: gatekeeper-pwa
+        run: npm run typecheck
+        
+      - name: Build PWA (Production)
+        working-directory: gatekeeper-pwa
+        run: npm run build:production
+        
+      - name: Prepare release files
+        run: |
+          # Create release directory
+          mkdir -p release-package
+          
+          # Copy built dist directory
+          cp -r gatekeeper-pwa/dist release-package/
+          
+          # Copy nginx configuration
+          cp gatekeeper-pwa/nginx.conf release-package/
+          
+          # Copy and rename docker-compose file
+          cp gatekeeper-pwa/docker-compose.production.yaml release-package/docker-compose.yaml
+          
+      - name: Create release archive
+        run: |
+          cd release-package
+          tar -czf ../gatekeeper-pwa-release.tar.gz .
+          cd ..
+          
+      - name: Generate release notes
+        id: release_notes
+        run: |
+          echo "RELEASE_NOTES<<EOF" >> $GITHUB_OUTPUT
+          echo "## Gatekeeper PWA Release" >> $GITHUB_OUTPUT
+          echo "" >> $GITHUB_OUTPUT
+          echo "### 📦 Package Contents" >> $GITHUB_OUTPUT
+          echo "- \`dist/\` - Built PWA application files" >> $GITHUB_OUTPUT
+          echo "- \`nginx.conf\` - Nginx configuration for production deployment" >> $GITHUB_OUTPUT
+          echo "- \`docker-compose.yaml\` - Docker Compose configuration for production" >> $GITHUB_OUTPUT
+          echo "" >> $GITHUB_OUTPUT
+          echo "### 🚀 Quick Deploy" >> $GITHUB_OUTPUT
+          echo "\`\`\`bash" >> $GITHUB_OUTPUT
+          echo "# Extract the release" >> $GITHUB_OUTPUT
+          echo "tar -xzf gatekeeper-pwa-release.tar.gz" >> $GITHUB_OUTPUT
+          echo "" >> $GITHUB_OUTPUT
+          echo "# Start the application" >> $GITHUB_OUTPUT
+          echo "docker compose up -d" >> $GITHUB_OUTPUT
+          echo "\`\`\`" >> $GITHUB_OUTPUT
+          echo "" >> $GITHUB_OUTPUT
+          echo "### 📋 Build Info" >> $GITHUB_OUTPUT
+          echo "- **Commit:** \`${{ github.sha }}\`" >> $GITHUB_OUTPUT
+          echo "- **Tag:** \`${{ github.ref_name }}\`" >> $GITHUB_OUTPUT
+          echo "- **Build Date:** \`$(date -u)\`" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        id: create_release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          release_name: "Gatekeeper PWA ${{ github.ref_name }}"
+          body: ${{ steps.release_notes.outputs.RELEASE_NOTES }}
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          
+      - name: Upload release archive
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./gatekeeper-pwa-release.tar.gz
+          asset_name: gatekeeper-pwa-release.tar.gz
+          asset_content_type: application/gzip

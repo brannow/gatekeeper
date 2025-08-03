@@ -52,13 +52,24 @@ export default defineConfig({
     host: true,
     port: 3000
   },
-  // PWA optimization
+  // Production build optimization
   build: {
+    target: 'es2015',
+    minify: 'terser',
+    sourcemap: false,
     rollupOptions: {
       output: {
         manualChunks: {
-          vendor: ['react', 'react-dom']
+          vendor: ['react', 'react-dom'],
+          // Keep app logic separate for better caching
+          app: ['./src/hooks/useGatekeeper.ts', './src/services/NetworkService.ts']
         }
+      }
+    },
+    terserOptions: {
+      compress: {
+        drop_console: true,
+        drop_debugger: true
       }
     }
   },

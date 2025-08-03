@@ -19,8 +19,7 @@ const STATIC_ASSETS = [
   '/',
   '/index.html',
   '/manifest.json',
-  '/icon-192x192.png',
-  '/icon-512x512.png'
+  '/icon.svg'
 ];
 
 // Network timeout for online requests (5 seconds)

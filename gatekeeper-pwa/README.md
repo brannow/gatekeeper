@@ -61,12 +61,12 @@ A React + TypeScript PWA for controlling a gate through HTTP and MQTT communicat
 
 2. **Install Dependencies**:
    ```bash
-   docker exec gatekeeper-pwa npm install
+   docker exec gatekeeper-node npm install
    ```
 
 3. **Start Development Server**:
    ```bash
-   docker exec gatekeeper-pwa npm run dev
+   docker exec gatekeeper-node npm run dev
    ```
 
 3. **Configure Protocols**: 

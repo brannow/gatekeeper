@@ -39,8 +39,8 @@ export class HttpAdapter implements IHttpAdapter {
    */
   private buildUrl(path: string): string {
     const host = this.config.host.trim();
-    const port = this.config.port === 80 ? '' : `:${this.config.port}`;
-    return `http://${host}${port}${path}`;
+    const port = this.config.port === 443 ? '' : `:${this.config.port}`;
+    return `https://${host}${port}${path}`;
   }
 
   /**
